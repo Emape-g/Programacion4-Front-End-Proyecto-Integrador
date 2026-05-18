@@ -5,6 +5,7 @@ export interface Ingrediente {
   nombre: string;
   descripcion?: string;
   es_alergeno: boolean;
+  delete_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -16,9 +17,17 @@ export interface IngredientesResponse {
 
 type IngredientePayload = Omit<Ingrediente, 'id' | 'created_at' | 'updated_at'>;
 
-export async function getIngredientes(offset = 0, limit = 20): Promise<IngredientesResponse> {
+export interface IngredientesFiltros {
+  offset?: number;
+  limit?: number;
+  nombre?: string;
+  orden?: 'asc' | 'desc';
+}
+
+export async function getIngredientes(filtros: IngredientesFiltros = {}): Promise<IngredientesResponse> {
+  const { offset = 0, limit = 20, nombre, orden = 'desc' } = filtros;
   const res = await apiClient.get<IngredientesResponse>('/ingredientes/', {
-    params: { offset, limit },
+    params: { offset, limit, ...(nombre ? { nombre } : {}), orden },
   });
   return res.data;
 }
@@ -35,4 +44,9 @@ export async function updateIngrediente(id: number, data: Partial<IngredientePay
 
 export async function deleteIngrediente(id: number): Promise<void> {
   await apiClient.delete(`/ingredientes/${id}`);
+}
+
+export async function activarIngrediente(id: number): Promise<Ingrediente> {
+  const res = await apiClient.patch<Ingrediente>(`/ingredientes/${id}/activar`);
+  return res.data;
 }

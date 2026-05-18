@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Pencil, Trash2, Plus } from 'lucide-react';
+import { Pencil, Plus, ToggleLeft, ToggleRight, Search, ArrowUpDown } from 'lucide-react';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
@@ -9,8 +9,10 @@ import {
   createIngrediente,
   updateIngrediente,
   deleteIngrediente,
+  activarIngrediente,
 } from '../../api/ingredientes';
 import type { Ingrediente } from '../../api/ingredientes';
+import { useDebounce } from '../../hooks/useDebounce';
 
 type Tab = 'todos' | 'alergenos' | 'sin-alergeno';
 
@@ -34,6 +36,9 @@ export function IngredientesPage() {
   const [ingredientes, setIngredientes] = useState<Ingrediente[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [orden, setOrden] = useState<'asc' | 'desc'>('desc');
+  const debouncedSearch = useDebounce(search, 350);
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -42,23 +47,30 @@ export function IngredientesPage() {
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Delete state
+  // Delete / toggle state
   const [deleteTarget, setDeleteTarget] = useState<Ingrediente | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [activateTarget, setActivateTarget] = useState<Ingrediente | null>(null);
+  const [toggling, setToggling] = useState<number | null>(null);
+
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    getIngredientes(offset, LIMIT)
-      .then((res) => {
+    async function fetchData() {
+      setLoading(true);
+      try {
+        const res = await getIngredientes({ offset, limit: LIMIT, nombre: debouncedSearch || undefined, orden });
         if (!cancelled) {
           setIngredientes(res.data);
           setTotal(res.total);
         }
-      })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    fetchData();
     return () => { cancelled = true; };
-  }, [offset, refreshKey]);
+  }, [offset, refreshKey, debouncedSearch, orden]);
 
   function refresh() { setRefreshKey((k) => k + 1); }
 
@@ -128,6 +140,18 @@ export function IngredientesPage() {
     }
   }
 
+  async function handleActivar() {
+    if (!activateTarget) return;
+    setToggling(activateTarget.id);
+    try {
+      await activarIngrediente(activateTarget.id);
+      setActivateTarget(null);
+      refresh();
+    } finally {
+      setToggling(null);
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -138,6 +162,27 @@ export function IngredientesPage() {
         >
           <Plus size={16} />
           Nuevo Ingrediente
+        </button>
+      </div>
+
+      <div className="flex gap-3 mb-4">
+        <div className="relative flex-1 max-w-sm">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setOffset(0); }}
+            placeholder="Buscar por nombre..."
+            className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-[#2a7a8a]/30 focus:border-[#2a7a8a] transition-colors"
+          />
+        </div>
+        <button
+          onClick={() => { setOrden((o) => (o === 'desc' ? 'asc' : 'desc')); setOffset(0); }}
+          title={orden === 'desc' ? 'Más recientes primero' : 'Más antiguos primero'}
+          className="flex items-center gap-2 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+        >
+          <ArrowUpDown size={14} />
+          {orden === 'desc' ? 'Más recientes' : 'Más antiguos'}
         </button>
       </div>
 
@@ -164,7 +209,7 @@ export function IngredientesPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
-                {['#', 'Nombre', 'Descripción', 'Alérgeno', 'Creado', 'Acciones'].map((h) => (
+                {['#', 'Nombre', 'Descripción', 'Alérgeno', 'Estado', 'Creado', 'Acciones'].map((h) => (
                   <th
                     key={h}
                     className={`px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider ${h === 'Acciones' ? 'text-right' : 'text-left'}`}
@@ -178,7 +223,7 @@ export function IngredientesPage() {
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b border-gray-50 dark:border-gray-700/50">
-                    {Array.from({ length: 6 }).map((_, j) => (
+                    {Array.from({ length: 7 }).map((_, j) => (
                       <td key={j} className="px-4 py-3.5">
                         <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" style={{ width: `${60 + (j * 7) % 30}%` }} />
                       </td>
@@ -187,7 +232,7 @@ export function IngredientesPage() {
                 ))
               ) : displayed.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-16 text-center">
+                  <td colSpan={7} className="px-4 py-16 text-center">
                     <p className="text-gray-400 dark:text-gray-500 text-sm">No hay ingredientes para mostrar</p>
                   </td>
                 </tr>
@@ -203,6 +248,11 @@ export function IngredientesPage() {
                     <td className="px-4 py-3.5">
                       <Badge variant={item.es_alergeno ? 'orange' : 'green'}>
                         {item.es_alergeno ? 'Sí' : 'No'}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <Badge variant={!item.delete_at ? 'green' : 'red'}>
+                        {!item.delete_at ? 'Activo' : 'Inactivo'}
                       </Badge>
                     </td>
                     <td className="px-4 py-3.5 text-gray-500 dark:text-gray-400 whitespace-nowrap">
@@ -222,11 +272,16 @@ export function IngredientesPage() {
                           <Pencil size={15} />
                         </button>
                         <button
-                          onClick={() => setDeleteTarget(item)}
-                          title="Eliminar"
-                          className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 dark:text-red-400 transition-colors"
+                          onClick={() => !item.delete_at ? setDeleteTarget(item) : setActivateTarget(item)}
+                          disabled={toggling === item.id}
+                          title={!item.delete_at ? 'Desactivar' : 'Activar'}
+                          className={`p-1.5 rounded-lg transition-colors disabled:opacity-50 ${
+                            !item.delete_at
+                              ? 'hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 dark:text-red-400'
+                              : 'hover:bg-green-50 dark:hover:bg-green-900/20 text-green-500 dark:text-green-400'
+                          }`}
                         >
-                          <Trash2 size={15} />
+                          {!item.delete_at ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
                         </button>
                       </div>
                     </td>
@@ -309,14 +364,29 @@ export function IngredientesPage() {
         </div>
       </Modal>
 
-      {/* Delete Confirm */}
+      {/* Deactivate Confirm */}
       <ConfirmDialog
         isOpen={!!deleteTarget}
-        title="Eliminar ingrediente"
-        message={`¿Eliminar "${deleteTarget?.nombre}"? Esta acción no se puede deshacer.`}
+        title="Desactivar ingrediente"
+        message={`¿Desactivar "${deleteTarget?.nombre}"? Podrás reactivarlo luego.`}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
         loading={deleting}
+        confirmLabel="Desactivar"
+        confirmLoadingLabel="Desactivando..."
+      />
+
+      {/* Activate Confirm */}
+      <ConfirmDialog
+        isOpen={!!activateTarget}
+        title="Activar ingrediente"
+        message={`¿Activar "${activateTarget?.nombre}"?`}
+        onConfirm={handleActivar}
+        onCancel={() => setActivateTarget(null)}
+        loading={toggling === activateTarget?.id}
+        confirmLabel="Activar"
+        confirmLoadingLabel="Activando..."
+        confirmVariant="green"
       />
     </div>
   );

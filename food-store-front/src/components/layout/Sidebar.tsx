@@ -12,13 +12,13 @@ import {
 import { useAuth } from '../../context/AuthContext';
 
 const navItems = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/inventario', icon: Package, label: 'Inventario' },
-  { to: '/ingredientes', icon: Leaf, label: 'Ingredientes' },
-  { to: '/compras', icon: ShoppingCart, label: 'Compras' },
-  { to: '/reportes', icon: BarChart2, label: 'Reportes' },
-  { to: '/soporte', icon: Wrench, label: 'Soporte' },
-  { to: '/configuracion', icon: Settings, label: 'Configuración' },
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', enabled: false },
+  { to: '/inventario', icon: Package, label: 'Inventario', enabled: false },
+  { to: '/ingredientes', icon: Leaf, label: 'Ingredientes', enabled: true },
+  { to: '/compras', icon: ShoppingCart, label: 'Compras', enabled: false },
+  { to: '/reportes', icon: BarChart2, label: 'Reportes', enabled: false },
+  { to: '/soporte', icon: Wrench, label: 'Soporte', enabled: false },
+  { to: '/configuracion', icon: Settings, label: 'Configuración', enabled: false },
 ];
 
 export function Sidebar() {
@@ -43,22 +43,32 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-0.5">
-        {navItems.map(({ to, icon: Icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive
-                  ? 'bg-[#2a7a8a] text-white'
-                  : 'text-white/70 hover:bg-white/10 hover:text-white'
-              }`
-            }
-          >
-            <Icon size={18} />
-            {label}
-          </NavLink>
-        ))}
+        {navItems.map(({ to, icon: Icon, label, enabled }) =>
+          enabled ? (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-[#2a7a8a] text-white'
+                    : 'text-white/70 hover:bg-white/10 hover:text-white'
+                }`
+              }
+            >
+              <Icon size={18} />
+              {label}
+            </NavLink>
+          ) : (
+            <span
+              key={to}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/30 cursor-not-allowed select-none"
+            >
+              <Icon size={18} />
+              {label}
+            </span>
+          )
+        )}
       </nav>
 
       <div className="px-3 py-4 border-t border-white/10">

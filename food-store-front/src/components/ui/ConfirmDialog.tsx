@@ -5,10 +5,28 @@ interface ConfirmDialogProps {
   onConfirm: () => void;
   onCancel: () => void;
   loading?: boolean;
+  confirmLabel?: string;
+  confirmLoadingLabel?: string;
+  confirmVariant?: 'red' | 'green';
 }
 
-export function ConfirmDialog({ isOpen, title, message, onConfirm, onCancel, loading }: ConfirmDialogProps) {
+export function ConfirmDialog({
+  isOpen,
+  title,
+  message,
+  onConfirm,
+  onCancel,
+  loading,
+  confirmLabel = 'Eliminar',
+  confirmLoadingLabel = 'Eliminando...',
+  confirmVariant = 'red',
+}: ConfirmDialogProps) {
   if (!isOpen) return null;
+
+  const btnClass =
+    confirmVariant === 'green'
+      ? 'bg-green-600 hover:bg-green-700'
+      : 'bg-red-600 hover:bg-red-700';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -26,9 +44,9 @@ export function ConfirmDialog({ isOpen, title, message, onConfirm, onCancel, loa
           <button
             onClick={onConfirm}
             disabled={loading}
-            className="px-4 py-2 text-sm rounded-lg bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 transition-colors"
+            className={`px-4 py-2 text-sm rounded-lg text-white disabled:opacity-50 transition-colors ${btnClass}`}
           >
-            {loading ? 'Eliminando...' : 'Eliminar'}
+            {loading ? confirmLoadingLabel : confirmLabel}
           </button>
         </div>
       </div>
