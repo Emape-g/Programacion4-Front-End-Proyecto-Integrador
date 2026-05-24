@@ -13,7 +13,7 @@ import { useAuth } from '../../context/AuthContext';
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', enabled: false },
-  { to: '/inventario', icon: Package, label: 'Inventario', enabled: false },
+  { to: '/productos', icon: Package, label: 'Productos', enabled: true },
   { to: '/ingredientes', icon: Leaf, label: 'Ingredientes', enabled: true },
   { to: '/compras', icon: ShoppingCart, label: 'Compras', enabled: false },
   { to: '/reportes', icon: BarChart2, label: 'Reportes', enabled: false },

@@ -31,7 +31,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const stored = localStorage.getItem('access_token');
 
   const [token, setToken] = useState<string | null>(stored);
-  const [user, setUser] = useState<AuthUser | null>(stored ? decodeJWT(stored) : null);
+  const [user, setUser] = useState<AuthUser | null>(
+    stored ? decodeJWT(stored) : null
+  );
 
   function login(newToken: string) {
     localStorage.setItem('access_token', newToken);
