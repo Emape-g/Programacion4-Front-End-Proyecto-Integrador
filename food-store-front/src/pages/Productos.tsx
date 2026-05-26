@@ -2,16 +2,29 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 
+interface CategoriaProducto {
+  categoria_id?: number;
+  nombre_categoria?: string;
+  es_principal?: boolean;
+  id?: number;
+  nombre?: string;
+  name?: string;
+  categoria_nombre?: string;
+}
+
 interface Producto {
   id: number;
   nombre: string;
   descripcion: string;
   precio_base: number | string;
-  unidad_venta_id?: number;
-  unidad_venta_simbolo?: string;
   imagenes_url?: string[];
   stock_cantidad: number;
   disponible: boolean;
+
+  categorias?: CategoriaProducto[];
+  categorias_link?: any[];
+  categoria?: CategoriaProducto | string;
+  categoria_nombre?: string;
 }
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
@@ -42,6 +55,74 @@ function obtenerListaProductos(data: any): Producto[] {
   );
 
   return Array.isArray(primeraLista) ? (primeraLista as Producto[]) : [];
+}
+
+function obtenerCategoriasProducto(producto: Producto): string {
+  if (Array.isArray(producto.categorias) && producto.categorias.length > 0) {
+    return producto.categorias
+      .map(
+        (cat: any) =>
+          cat.nombre_categoria ??
+          cat.nombre ??
+          cat.name ??
+          cat.categoria_nombre ??
+          cat.categoria_id ??
+          cat.id
+      )
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  if (
+    Array.isArray(producto.categorias_link) &&
+    producto.categorias_link.length > 0
+  ) {
+    return producto.categorias_link
+      .map(
+        (link: any) =>
+          link.categoria?.nombre ??
+          link.categoria?.name ??
+          link.nombre_categoria ??
+          link.categoria_nombre ??
+          link.nombre ??
+          link.categoria_id
+      )
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  if (typeof producto.categoria === "object" && producto.categoria?.nombre) {
+    return producto.categoria.nombre;
+  }
+
+  if (
+    typeof producto.categoria === "object" &&
+    producto.categoria?.nombre_categoria
+  ) {
+    return producto.categoria.nombre_categoria;
+  }
+
+  if (producto.categoria_nombre) {
+    return producto.categoria_nombre;
+  }
+
+  if (producto.categoria) {
+    return String(producto.categoria);
+  }
+
+  return "-";
+}
+
+function obtenerImagenProducto(producto: Producto): string | null {
+  if (Array.isArray(producto.imagenes_url) && producto.imagenes_url.length > 0) {
+    return producto.imagenes_url[0];
+  }
+
+  return null;
+}
+
+function productoEstaDisponible(producto: Producto): boolean {
+  return producto.disponible && producto.stock_cantidad > 0;
 }
 
 function Badge({ activo }: { activo: boolean }) {
@@ -75,6 +156,8 @@ export default function Productos() {
   const navigate = useNavigate();
 
   const [productos, setProductos] = useState<Producto[]>([]);
+  const [productoSeleccionado, setProductoSeleccionado] =
+    useState<Producto | null>(null);
   const [busqueda, setBusqueda] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -87,8 +170,26 @@ export default function Productos() {
       const { data } = await api.get("/productos/");
       console.log("Productos desde backend:", data);
 
-      const lista = obtenerListaProductos(data);
-      setProductos(lista);
+      const listaBasica = obtenerListaProductos(data);
+
+      const listaConDetalle = await Promise.all(
+        listaBasica.map(async (producto) => {
+          try {
+            const detalle = await api.get(`/productos/${producto.id}`);
+            return detalle.data;
+          } catch (error) {
+            console.error(
+              `No se pudo cargar el detalle del producto ${producto.id}`,
+              error
+            );
+            return producto;
+          }
+        })
+      );
+
+      console.log("Productos con detalle:", listaConDetalle);
+
+      setProductos(listaConDetalle);
     } catch (error) {
       console.error("Error al cargar productos:", error);
       setError("No se pudieron cargar los productos.");
@@ -124,8 +225,8 @@ export default function Productos() {
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Productos</h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            {productos.length} producto{productos.length !== 1 ? "s" : ""} registrado
-            {productos.length !== 1 ? "s" : ""}
+            {productos.length} producto{productos.length !== 1 ? "s" : ""}{" "}
+            registrado{productos.length !== 1 ? "s" : ""}
           </p>
         </div>
 
@@ -202,7 +303,9 @@ export default function Productos() {
             </svg>
             <p className="text-sm font-medium">No se encontraron productos</p>
             <p className="text-xs mt-1">
-              {busqueda ? "Probá con otro término de búsqueda" : "Creá tu primer producto"}
+              {busqueda
+                ? "Probá con otro término de búsqueda"
+                : "Creá tu primer producto"}
             </p>
           </div>
         ) : (
@@ -214,13 +317,16 @@ export default function Productos() {
                     ID
                   </th>
                   <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-6 py-3.5">
+                    Imagen
+                  </th>
+                  <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-6 py-3.5">
                     Nombre
                   </th>
                   <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-6 py-3.5">
-                    Precio
+                    Categoría
                   </th>
                   <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-6 py-3.5">
-                    Unidad
+                    Precio
                   </th>
                   <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-6 py-3.5">
                     Stock
@@ -235,75 +341,192 @@ export default function Productos() {
               </thead>
 
               <tbody className="divide-y divide-slate-100">
-                {productosFiltrados.map((producto) => (
-                  <tr key={producto.id} className="hover:bg-slate-50/50 transition group">
-                    <td className="px-6 py-4 text-sm text-slate-400 font-mono">
-                      #{producto.id}
-                    </td>
+                {productosFiltrados.map((producto) => {
+                  const imagen = obtenerImagenProducto(producto);
 
-                    <td className="px-6 py-4">
-                      <p className="text-sm font-medium text-slate-800">
-                        {producto.nombre}
-                      </p>
-                      {producto.descripcion && (
-                        <p className="text-xs text-slate-400 truncate max-w-xs mt-0.5">
-                          {producto.descripcion}
+                  return (
+                    <tr
+                      key={producto.id}
+                      className="hover:bg-slate-50/50 transition group"
+                    >
+                      <td className="px-6 py-4 text-sm text-slate-400 font-mono">
+                        #{producto.id}
+                      </td>
+
+                      <td className="px-6 py-4">
+                        {imagen ? (
+                          <img
+                            src={imagen}
+                            alt={producto.nombre}
+                            className="w-12 h-12 rounded-xl object-cover border border-slate-200 bg-slate-100"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-xl border border-slate-200 bg-slate-100 flex items-center justify-center text-xs text-slate-400">
+                            Sin img
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="px-6 py-4">
+                        <p className="text-sm font-medium text-slate-800">
+                          {producto.nombre}
                         </p>
-                      )}
-                    </td>
+                        {producto.descripcion && (
+                          <p className="text-xs text-slate-400 truncate max-w-xs mt-0.5">
+                            {producto.descripcion}
+                          </p>
+                        )}
+                      </td>
 
-                    <td className="px-6 py-4 text-sm font-semibold text-slate-700">
-                      ${Number(producto.precio_base).toFixed(2)}
-                    </td>
+                      <td className="px-6 py-4 text-sm text-slate-600">
+                        {obtenerCategoriasProducto(producto)}
+                      </td>
 
-                    <td className="px-6 py-4 text-sm text-slate-600">
-                      {producto.unidad_venta_simbolo ?? "-"}
-                    </td>
+                      <td className="px-6 py-4 text-sm font-semibold text-slate-700">
+                        ${Number(producto.precio_base).toFixed(2)}
+                      </td>
 
-                    <td className="px-6 py-4">
-                      <span
-                        className={`text-sm font-medium ${
-                          producto.stock_cantidad <= 0
-                            ? "text-red-500"
-                            : producto.stock_cantidad < 10
-                            ? "text-amber-500"
-                            : "text-slate-700"
-                        }`}
-                      >
-                        {producto.stock_cantidad}
-                      </span>
-                    </td>
-
-                    <td className="px-6 py-4">
-                      <Badge activo={producto.disponible} />
-                    </td>
-
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => navigate(`/productos/${producto.id}`)}
-                          title="Ver detalle"
-                          className="p-1.5 rounded-lg hover:bg-[#2a7a8a]/10 text-slate-500 hover:text-[#2a7a8a] transition"
+                      <td className="px-6 py-4">
+                        <span
+                          className={`text-sm font-medium ${
+                            producto.stock_cantidad <= 0
+                              ? "text-red-500"
+                              : producto.stock_cantidad < 10
+                              ? "text-amber-500"
+                              : "text-slate-700"
+                          }`}
                         >
-                          Ver
-                        </button>
+                          {producto.stock_cantidad}
+                        </span>
+                      </td>
 
-                        <button
-                          onClick={() => eliminarProducto(producto.id)}
-                          title="Eliminar"
-                          className="p-1.5 rounded-lg hover:bg-red-50 text-slate-500 hover:text-red-600 transition"
-                        >
-                          Eliminar
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      <td className="px-6 py-4">
+                        <Badge activo={productoEstaDisponible(producto)} />
+                      </td>
+
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-end gap-3">
+                          <button
+                            onClick={() => setProductoSeleccionado(producto)}
+                            className="text-sm text-slate-600 hover:text-[#2a7a8a] transition"
+                          >
+                            Ver
+                          </button>
+
+                          <button
+                            onClick={() => eliminarProducto(producto.id)}
+                            className="text-sm text-slate-600 hover:text-red-600 transition"
+                          >
+                            Eliminar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
+
+      {productoSeleccionado && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-lg overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-slate-800">
+                Detalle del producto
+              </h2>
+
+              <button
+                onClick={() => setProductoSeleccionado(null)}
+                className="text-slate-400 hover:text-slate-700 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {obtenerImagenProducto(productoSeleccionado) ? (
+                <img
+                  src={obtenerImagenProducto(productoSeleccionado) as string}
+                  alt={productoSeleccionado.nombre}
+                  className="w-full h-48 object-cover rounded-xl border border-slate-200"
+                />
+              ) : (
+                <div className="w-full h-32 rounded-xl border border-slate-200 bg-slate-100 flex items-center justify-center text-slate-400">
+                  Sin imagen
+                </div>
+              )}
+
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-400 font-semibold">
+                  Nombre
+                </p>
+                <p className="text-slate-800 font-medium">
+                  {productoSeleccionado.nombre}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-400 font-semibold">
+                  Descripción
+                </p>
+                <p className="text-slate-700">
+                  {productoSeleccionado.descripcion || "-"}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-400 font-semibold">
+                    Categoría
+                  </p>
+                  <p className="text-slate-700">
+                    {obtenerCategoriasProducto(productoSeleccionado)}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-400 font-semibold">
+                    Precio
+                  </p>
+                  <p className="text-slate-700 font-semibold">
+                    ${Number(productoSeleccionado.precio_base).toFixed(2)}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-400 font-semibold">
+                    Stock
+                  </p>
+                  <p className="text-slate-700">
+                    {productoSeleccionado.stock_cantidad}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-400 font-semibold">
+                    Estado
+                  </p>
+                  <div className="mt-1">
+                    <Badge activo={productoEstaDisponible(productoSeleccionado)} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-100 flex justify-end">
+              <button
+                onClick={() => setProductoSeleccionado(null)}
+                className="px-4 py-2 text-sm bg-[#2a7a8a] hover:bg-[#236674] text-white rounded-xl transition"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
