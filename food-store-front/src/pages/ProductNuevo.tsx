@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import apiClient from "../api/axiosClient";
 
 interface UnidadMedida {
   id: number;
@@ -31,23 +31,8 @@ interface IngredienteProductoTemp {
   unidad_medida_id?: number;
   cantidad: number;
   precio_unitario: number;
+  es_removible: boolean;
 }
-
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
-
-const api = axios.create({
-  baseURL: API_BASE,
-});
-
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("access_token");
-
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-
-  return config;
-});
 
 function obtenerLista<T>(data: any): T[] {
   if (Array.isArray(data)) return data;
@@ -96,6 +81,8 @@ export default function ProductNuevo() {
 
   const [cantidadIngrediente, setCantidadIngrediente] = useState("");
   const [precioUnitario, setPrecioUnitario] = useState("");
+  const [unidadMedidaIngredienteId, setUnidadMedidaIngredienteId] = useState("");
+  const [esRemovible, setEsRemovible] = useState(false);
 
   const [ingredientesProducto, setIngredientesProducto] = useState<
     IngredienteProductoTemp[]
@@ -113,9 +100,9 @@ export default function ProductNuevo() {
       try {
         const [resUnidades, resIngredientes, resCategorias] =
           await Promise.all([
-            api.get("/unidades-medida/"),
-            api.get("/ingredientes/"),
-            api.get("/categorias/"),
+            apiClient.get("/unidades-medida/"),
+            apiClient.get("/ingredientes/"),
+            apiClient.get("/categorias/"),
           ]);
 
         const listaUnidades = obtenerLista<UnidadMedida>(resUnidades.data);
@@ -166,6 +153,8 @@ export default function ProductNuevo() {
     setIngredienteSeleccionado(null);
     setCantidadIngrediente("");
     setPrecioUnitario("");
+    setUnidadMedidaIngredienteId("");
+    setEsRemovible(false);
     setMostrarDropdownIngredientes(false);
   }
 
@@ -190,6 +179,11 @@ export default function ProductNuevo() {
       return;
     }
 
+    if (!unidadMedidaIngredienteId) {
+      setError("Seleccioná una unidad de medida para el ingrediente.");
+      return;
+    }
+
     const yaExiste = ingredientesProducto.some(
       (item) => item.ingrediente_id === ingredienteSeleccionado.id
     );
@@ -208,9 +202,10 @@ export default function ProductNuevo() {
       ingrediente_id: ingredienteSeleccionado.id,
       nombre: ingredienteSeleccionado.nombre,
       unidad,
-      unidad_medida_id: ingredienteSeleccionado.unidad_medida_id,
+      unidad_medida_id: Number(unidadMedidaIngredienteId),
       cantidad,
       precio_unitario: precio || 0,
+      es_removible: esRemovible,
     };
 
     setIngredientesProducto((prev) => [...prev, nuevoIngrediente]);
@@ -271,40 +266,17 @@ export default function ProductNuevo() {
             es_principal: true,
           },
         ],
-        ingredientes: [],
+        ingredientes: ingredientesProducto.map((ing) => ({
+          ingrediente_id: ing.ingrediente_id,
+          cantidad: ing.cantidad,
+          unidad_medida_id: ing.unidad_medida_id,
+          es_removible: ing.es_removible,
+        })),
       };
 
       console.log("Payload producto:", payloadProducto);
 
-      const responseProducto = await api.post("/productos/", payloadProducto);
-
-      const productoCreado = responseProducto.data;
-      const productoId = productoCreado.id;
-
-      console.log("Producto creado:", productoCreado);
-
-      try {
-        for (const ingrediente of ingredientesProducto) {
-          const payloadIngrediente = {
-            ingrediente_id: ingrediente.ingrediente_id,
-            cantidad: ingrediente.cantidad,
-            unidad_medida_id:
-              ingrediente.unidad_medida_id ?? Number(unidadVentaId),
-          };
-
-          console.log("Agregando ingrediente:", payloadIngrediente);
-
-          await api.post(
-            `/productos/${productoId}/ingredientes`,
-            payloadIngrediente
-          );
-        }
-      } catch (error) {
-        console.error(
-          "El producto se creó, pero falló al agregar ingredientes:",
-          error
-        );
-      }
+      await apiClient.post("/productos/", payloadProducto);
 
       navigate("/productos");
     } catch (error: any) {
@@ -511,7 +483,7 @@ export default function ProductNuevo() {
                 Agregar ingrediente
               </p>
 
-              <div className="grid grid-cols-1 lg:grid-cols-[1fr_140px_140px_120px] gap-3">
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_140px_160px_140px_auto_120px] gap-3">
                 <div className="relative">
                   <input
                     value={busquedaIngrediente}
@@ -543,6 +515,11 @@ export default function ProductNuevo() {
                                     ? String(ingrediente.precio_unitario)
                                     : ""
                                 );
+                                setUnidadMedidaIngredienteId(
+                                  ingrediente.unidad_medida_id
+                                    ? String(ingrediente.unidad_medida_id)
+                                    : ""
+                                );
                                 setMostrarDropdownIngredientes(false);
                               }}
                               className="w-full text-left px-4 py-2.5 text-sm hover:bg-[#2a7a8a]/10 transition"
@@ -566,6 +543,19 @@ export default function ProductNuevo() {
                   className="px-4 py-2.5 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2a7a8a]/30 focus:border-[#2a7a8a]"
                 />
 
+                <select
+                  value={unidadMedidaIngredienteId}
+                  onChange={(e) => setUnidadMedidaIngredienteId(e.target.value)}
+                  className="px-4 py-2.5 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2a7a8a]/30 focus:border-[#2a7a8a]"
+                >
+                  <option value="">Unidad medida</option>
+                  {unidades.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.nombre} ({u.simbolo})
+                    </option>
+                  ))}
+                </select>
+
                 <input
                   type="number"
                   min="0"
@@ -575,6 +565,16 @@ export default function ProductNuevo() {
                   placeholder="Precio/u"
                   className="px-4 py-2.5 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2a7a8a]/30 focus:border-[#2a7a8a]"
                 />
+
+                <label className="flex items-center gap-2 text-sm text-slate-700 whitespace-nowrap">
+                  <input
+                    type="checkbox"
+                    checked={esRemovible}
+                    onChange={(e) => setEsRemovible(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  Removible
+                </label>
 
                 <button
                   type="button"
@@ -602,6 +602,9 @@ export default function ProductNuevo() {
                     <th className="text-left text-xs font-semibold text-slate-500 uppercase px-6 py-3">
                       Costo estimado
                     </th>
+                    <th className="text-left text-xs font-semibold text-slate-500 uppercase px-6 py-3">
+                      Removible
+                    </th>
                     <th className="text-right text-xs font-semibold text-slate-500 uppercase px-6 py-3">
                       Acciones
                     </th>
@@ -612,7 +615,7 @@ export default function ProductNuevo() {
                   {ingredientesProducto.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={5}
+                        colSpan={6}
                         className="py-12 text-center text-slate-400"
                       >
                         Sin ingredientes. Agregá el primero.
@@ -632,6 +635,9 @@ export default function ProductNuevo() {
                         </td>
                         <td className="px-6 py-4 text-sm font-semibold text-slate-700">
                           ${(item.cantidad * item.precio_unitario).toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-500">
+                          {item.es_removible ? "Sí" : "No"}
                         </td>
                         <td className="px-6 py-4 text-right">
                           <button

@@ -5,6 +5,7 @@ import { Layout } from './components/layout/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { IngredientesPage } from './pages/ingredientes/IngredientesPage';
+import { CategoriasPage } from './pages/categorias/CategoriasPage';
 import Productos from './pages/Productos';
 import ProductNuevo from './pages/ProductNuevo';
 function App() {
@@ -19,6 +20,7 @@ function App() {
             <Route element={<Layout />}>
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/ingredientes" element={<IngredientesPage />} />
+              <Route path="/categorias" element={<CategoriasPage />} />
               <Route path="/productos" element={<Productos />} />
               <Route path="/productos/nuevo" element={<ProductNuevo />} />
             </Route>

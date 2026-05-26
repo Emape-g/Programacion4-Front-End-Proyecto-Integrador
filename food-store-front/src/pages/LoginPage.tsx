@@ -20,15 +20,15 @@ export function LoginPage() {
       const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-       body: JSON.stringify({ email, password }),
+        credentials: 'include',
+        body: JSON.stringify({ email, password }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.detail ?? 'Credenciales inválidas');
       }
-      const body = await res.json();
-      const token: string = body.access_token ?? body.token ?? body;
-      login(token);
+      const userData = await res.json();
+      login(userData);
       navigate('/dashboard', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al iniciar sesión');
