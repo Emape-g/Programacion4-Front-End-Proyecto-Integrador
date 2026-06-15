@@ -292,7 +292,7 @@ export default function ProductNuevo() {
 
     const unidadId = Number(unidadIngredienteId);
     if (!Number.isInteger(unidadId) || unidadId <= 0) {
-      setError("Seleccioná la unidad de medida del ingrediente.");
+      setError("Este ingrediente no tiene unidad cargada. Editalo desde Ingredientes antes de agregarlo al producto.");
       return;
     }
 
@@ -626,23 +626,6 @@ export default function ProductNuevo() {
 
               <div>
                 <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5 uppercase tracking-wide">
-                  Unidad de venta <span className="text-red-400">*</span>
-                </label>
-                <select
-                  value={unidadVentaId}
-                  onChange={(e) => setUnidadVentaId(e.target.value)}
-                  className="w-full px-4 py-2.5 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#2a7a8a]/30 focus:border-[#2a7a8a] transition-colors"
-                >
-                  {unidades.map((unidad) => (
-                    <option key={unidad.id} value={unidad.id}>
-                      {unidad.nombre} ({unidad.simbolo})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5 uppercase tracking-wide">
                   Categoría <span className="text-red-400">*</span>
                 </label>
 
@@ -733,7 +716,7 @@ export default function ProductNuevo() {
                 Agregar ingrediente
               </p>
 
-              <div className="grid grid-cols-1 lg:grid-cols-[1fr_130px_160px_130px_auto_120px] gap-3">
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_130px_120px_130px_auto_120px] gap-3">
                 <div className="relative">
                   <input
                     value={busquedaIngrediente}
@@ -790,17 +773,11 @@ export default function ProductNuevo() {
                   className="px-4 py-2.5 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#2a7a8a]/30 focus:border-[#2a7a8a] transition-colors"
                 />
 
-                <select
-                  value={unidadIngredienteId}
-                  onChange={(e) => setUnidadIngredienteId(e.target.value)}
-                  aria-label="Unidad de medida del ingrediente"
-                  className="px-4 py-2.5 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#2a7a8a]/30 focus:border-[#2a7a8a] transition-colors"
-                >
-                  <option value="">Unidad de medida</option>
-                  {unidades.map((unidad) => (
-                    <option key={unidad.id} value={unidad.id}>{unidad.nombre} ({unidad.simbolo})</option>
-                  ))}
-                </select>
+                <div className="flex items-center rounded-lg border border-gray-300 bg-gray-50 px-4 py-2.5 text-sm text-gray-700 dark:border-gray-600 dark:bg-gray-700/60 dark:text-gray-200">
+                  {unidadIngredienteId
+                    ? unidades.find((unidad) => unidad.id === Number(unidadIngredienteId))?.simbolo ?? "Unidad"
+                    : "Sin unidad"}
+                </div>
 
                 <input
                   type="number"
@@ -962,3 +939,4 @@ export default function ProductNuevo() {
     </div>
   );
 }
+
