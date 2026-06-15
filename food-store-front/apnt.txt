@@ -1,0 +1,773 @@
+# Apuntes rápidos React + TypeScript + Tailwind
+
+## Objetivo del examen
+
+Hacer una página web sencilla en React + TS + Tailwind en poco tiempo.
+
+Prioridad:
+
+1. Que funcione.
+2. Que no tenga errores.
+3. Que tenga componentes.
+4. Que use `useState`.
+5. Que use `.map()`.
+6. Que tenga Tailwind.
+7. Si pide API, usar `useEffect + fetch`.
+
+---
+
+# Comandos importantes
+
+## Instalar dependencias
+
+```bash
+npm install
+```
+
+## Ejecutar el proyecto
+
+```bash
+npm run dev
+```
+
+Sirve para ver la página en el navegador.
+
+## Comprobar si compila
+
+```bash
+npm run build
+```
+
+Sirve para verificar que el proyecto no tenga errores graves antes de entregar.
+
+NO usar:
+
+```bash
+npm audit fix --force
+```
+
+Puede romper versiones antes del examen.
+
+---
+
+# Estructura básica de React
+
+```tsx
+function App() {
+  return (
+    <main>
+      <h1>Hola React</h1>
+    </main>
+  )
+}
+
+export default App
+```
+
+En React no se usa `class`, se usa:
+
+```tsx
+className="..."
+```
+
+Mal:
+
+```tsx
+<div class="p-4">
+```
+
+Bien:
+
+```tsx
+<div className="p-4">
+```
+
+---
+
+# TypeScript básico
+
+Crear un tipo:
+
+```tsx
+type Producto = {
+  id: number
+  nombre: string
+  precio: number
+}
+```
+
+Array tipado:
+
+```tsx
+const [productos, setProductos] = useState<Producto[]>([])
+```
+
+Texto:
+
+```tsx
+const [nombre, setNombre] = useState('')
+```
+
+Número:
+
+```tsx
+const [cantidad, setCantidad] = useState(0)
+```
+
+Booleano:
+
+```tsx
+const [activo, setActivo] = useState(false)
+```
+
+Valor que puede estar vacío:
+
+```tsx
+const [seleccionadoId, setSeleccionadoId] = useState<number | null>(null)
+```
+
+---
+
+# useState
+
+Importar:
+
+```tsx
+import { useState } from 'react'
+```
+
+Ejemplo:
+
+```tsx
+const [contador, setContador] = useState(0)
+```
+
+Botón:
+
+```tsx
+<button onClick={() => setContador(contador + 1)}>
+  Sumar
+</button>
+```
+
+Si depende del valor anterior:
+
+```tsx
+setContador(prev => prev + 1)
+```
+
+---
+
+# Input controlado
+
+```tsx
+const [texto, setTexto] = useState('')
+
+<input
+  value={texto}
+  onChange={e => setTexto(e.target.value)}
+  className="border rounded px-3 py-2"
+/>
+```
+
+---
+
+# Formulario
+
+Siempre usar:
+
+```tsx
+function handleSubmit(e: React.FormEvent) {
+  e.preventDefault()
+}
+```
+
+Ejemplo:
+
+```tsx
+<form onSubmit={handleSubmit}>
+  <input
+    value={nombre}
+    onChange={e => setNombre(e.target.value)}
+    className="border rounded px-3 py-2"
+  />
+
+  <button type="submit">
+    Guardar
+  </button>
+</form>
+```
+
+Si no ponés `e.preventDefault()`, la página se recarga.
+
+---
+
+# Agregar elementos a una lista
+
+```tsx
+type Tarea = {
+  id: number
+  texto: string
+}
+
+const [tareas, setTareas] = useState<Tarea[]>([])
+const [texto, setTexto] = useState('')
+
+function agregarTarea() {
+  if (texto.trim() === '') return
+
+  const nuevaTarea: Tarea = {
+    id: Date.now(),
+    texto: texto,
+  }
+
+  setTareas([...tareas, nuevaTarea])
+  setTexto('')
+}
+```
+
+---
+
+# Mostrar lista con map
+
+```tsx
+{tareas.map(tarea => (
+  <div key={tarea.id}>
+    {tarea.texto}
+  </div>
+))}
+```
+
+Todo `.map()` necesita `key`.
+
+---
+
+# Eliminar elemento
+
+```tsx
+function eliminarTarea(id: number) {
+  setTareas(tareas.filter(tarea => tarea.id !== id))
+}
+```
+
+Uso:
+
+```tsx
+<button onClick={() => eliminarTarea(tarea.id)}>
+  Eliminar
+</button>
+```
+
+---
+
+# Actualizar elemento
+
+```tsx
+function cambiarEstado(id: number) {
+  setTareas(tareas.map(tarea =>
+    tarea.id === id
+      ? { ...tarea, hecha: !tarea.hecha }
+      : tarea
+  ))
+}
+```
+
+---
+
+# Filtro / buscador
+
+```tsx
+const [busqueda, setBusqueda] = useState('')
+
+const filtrados = productos.filter(producto =>
+  producto.nombre.toLowerCase().includes(busqueda.toLowerCase())
+)
+```
+
+Input:
+
+```tsx
+<input
+  value={busqueda}
+  onChange={e => setBusqueda(e.target.value)}
+  placeholder="Buscar..."
+  className="border rounded px-3 py-2 w-full"
+/>
+```
+
+Render:
+
+```tsx
+{filtrados.map(producto => (
+  <div key={producto.id}>
+    {producto.nombre}
+  </div>
+))}
+```
+
+---
+
+# Componente con props
+
+```tsx
+type CardProps = {
+  titulo: string
+  descripcion: string
+}
+
+function Card({ titulo, descripcion }: CardProps) {
+  return (
+    <article className="border rounded p-4">
+      <h2 className="font-bold">{titulo}</h2>
+      <p>{descripcion}</p>
+    </article>
+  )
+}
+```
+
+Uso:
+
+```tsx
+<Card titulo="React" descripcion="Biblioteca de frontend" />
+```
+
+---
+
+# Pasar función como prop
+
+```tsx
+type Tarea = {
+  id: number
+  texto: string
+}
+
+type TareaCardProps = {
+  tarea: Tarea
+  onEliminar: (id: number) => void
+}
+
+function TareaCard({ tarea, onEliminar }: TareaCardProps) {
+  return (
+    <div className="border rounded p-4">
+      <p>{tarea.texto}</p>
+
+      <button onClick={() => onEliminar(tarea.id)}>
+        Eliminar
+      </button>
+    </div>
+  )
+}
+```
+
+---
+
+# Radio button
+
+```tsx
+const [modalidad, setModalidad] = useState('Presencial')
+
+{['Presencial', 'Virtual', 'Híbrido'].map(opcion => (
+  <label key={opcion} className="flex items-center gap-2">
+    <input
+      type="radio"
+      name="modalidad"
+      value={opcion}
+      checked={modalidad === opcion}
+      onChange={e => setModalidad(e.target.value)}
+    />
+    {opcion}
+  </label>
+))}
+```
+
+Claves:
+
+* Todos los radio comparten el mismo `name`.
+* Se usa `checked={estado === opcion}`.
+
+---
+
+# Checkbox simple
+
+```tsx
+const [acepta, setAcepta] = useState(false)
+
+<input
+  type="checkbox"
+  checked={acepta}
+  onChange={e => setAcepta(e.target.checked)}
+/>
+```
+
+---
+
+# Checkbox múltiple
+
+```tsx
+const [tecnologias, setTecnologias] = useState<string[]>([])
+
+function toggleTecnologia(tec: string) {
+  if (tecnologias.includes(tec)) {
+    setTecnologias(tecnologias.filter(t => t !== tec))
+  } else {
+    setTecnologias([...tecnologias, tec])
+  }
+}
+```
+
+Uso:
+
+```tsx
+{['React', 'TypeScript', 'Tailwind'].map(tec => (
+  <label key={tec} className="flex items-center gap-2">
+    <input
+      type="checkbox"
+      checked={tecnologias.includes(tec)}
+      onChange={() => toggleTecnologia(tec)}
+    />
+    {tec}
+  </label>
+))}
+```
+
+---
+
+# Select
+
+```tsx
+const [categoria, setCategoria] = useState('Todas')
+
+<select
+  value={categoria}
+  onChange={e => setCategoria(e.target.value)}
+  className="border rounded px-3 py-2"
+>
+  <option value="Todas">Todas</option>
+  <option value="Frontend">Frontend</option>
+  <option value="Backend">Backend</option>
+</select>
+```
+
+---
+
+# useEffect + fetch
+
+Importar:
+
+```tsx
+import { useEffect, useState } from 'react'
+```
+
+Ejemplo:
+
+```tsx
+type Usuario = {
+  id: number
+  name: string
+  email: string
+}
+
+const [usuarios, setUsuarios] = useState<Usuario[]>([])
+const [loading, setLoading] = useState(true)
+const [error, setError] = useState<string | null>(null)
+
+useEffect(() => {
+  fetch('https://jsonplaceholder.typicode.com/users')
+    .then(res => {
+      if (!res.ok) throw new Error('Error al cargar')
+      return res.json()
+    })
+    .then((data: Usuario[]) => setUsuarios(data))
+    .catch(err => setError(err.message))
+    .finally(() => setLoading(false))
+}, [])
+```
+
+Render:
+
+```tsx
+if (loading) return <p className="p-4">Cargando...</p>
+if (error) return <p className="p-4 text-red-500">{error}</p>
+```
+
+El `[]` del final hace que el efecto se ejecute una sola vez.
+
+---
+
+# Tailwind útil
+
+Contenedor:
+
+```tsx
+className="max-w-6xl mx-auto p-6"
+```
+
+Card:
+
+```tsx
+className="bg-white rounded-xl shadow p-5 border"
+```
+
+Grid responsive:
+
+```tsx
+className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+```
+
+Flex:
+
+```tsx
+className="flex items-center gap-2"
+```
+
+Input:
+
+```tsx
+className="w-full border rounded px-3 py-2"
+```
+
+Botón principal:
+
+```tsx
+className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+```
+
+Botón rojo:
+
+```tsx
+className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
+```
+
+Título:
+
+```tsx
+className="text-3xl font-bold mb-4"
+```
+
+Texto gris:
+
+```tsx
+className="text-slate-600"
+```
+
+Fondo de página:
+
+```tsx
+className="min-h-screen bg-slate-100 p-6"
+```
+
+---
+
+# Plantilla rápida para App.tsx
+
+```tsx
+import { useState } from 'react'
+
+type Item = {
+  id: number
+  nombre: string
+  categoria: string
+}
+
+function App() {
+  const [items, setItems] = useState<Item[]>([])
+  const [nombre, setNombre] = useState('')
+  const [categoria, setCategoria] = useState('General')
+  const [busqueda, setBusqueda] = useState('')
+
+  function agregarItem(e: React.FormEvent) {
+    e.preventDefault()
+
+    if (!nombre.trim()) return
+
+    const nuevoItem: Item = {
+      id: Date.now(),
+      nombre,
+      categoria,
+    }
+
+    setItems([...items, nuevoItem])
+    setNombre('')
+    setCategoria('General')
+  }
+
+  function eliminarItem(id: number) {
+    setItems(items.filter(item => item.id !== id))
+  }
+
+  const filtrados = items.filter(item =>
+    item.nombre.toLowerCase().includes(busqueda.toLowerCase())
+  )
+
+  return (
+    <main className="min-h-screen bg-slate-100 p-6">
+      <div className="max-w-5xl mx-auto">
+        <h1 className="text-3xl font-bold mb-6 text-center">
+          Mi aplicación
+        </h1>
+
+        <form onSubmit={agregarItem} className="bg-white rounded-xl shadow p-6 mb-6 grid gap-4">
+          <input
+            value={nombre}
+            onChange={e => setNombre(e.target.value)}
+            placeholder="Nombre"
+            className="border rounded px-3 py-2"
+          />
+
+          <select
+            value={categoria}
+            onChange={e => setCategoria(e.target.value)}
+            className="border rounded px-3 py-2"
+          >
+            <option value="General">General</option>
+            <option value="Importante">Importante</option>
+            <option value="Pendiente">Pendiente</option>
+          </select>
+
+          <button
+            type="submit"
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
+            Agregar
+          </button>
+        </form>
+
+        <input
+          value={busqueda}
+          onChange={e => setBusqueda(e.target.value)}
+          placeholder="Buscar..."
+          className="w-full border rounded px-3 py-2 mb-6"
+        />
+
+        <p className="text-sm text-slate-600 mb-4">
+          Mostrando {filtrados.length} de {items.length}
+        </p>
+
+        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtrados.map(item => (
+            <article key={item.id} className="bg-white rounded-xl shadow p-5 border">
+              <h2 className="text-xl font-bold">{item.nombre}</h2>
+              <p className="text-slate-600">{item.categoria}</p>
+
+              <button
+                onClick={() => eliminarItem(item.id)}
+                className="mt-4 bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
+              >
+                Eliminar
+              </button>
+            </article>
+          ))}
+        </section>
+      </div>
+    </main>
+  )
+}
+
+export default App
+```
+
+---
+
+# Orden para resolver el examen
+
+1. Leer bien la consigna.
+2. Crear los `type`.
+3. Crear los `useState`.
+4. Crear funciones: agregar, eliminar, filtrar.
+5. Hacer JSX simple.
+6. Usar `.map()`.
+7. Separar una card en componente si da tiempo.
+8. Agregar Tailwind.
+9. Probar en navegador.
+10. Correr `npm run build`.
+
+---
+
+# Errores comunes
+
+## Falta key
+
+Mal:
+
+```tsx
+{items.map(item => (
+  <div>{item.nombre}</div>
+))}
+```
+
+Bien:
+
+```tsx
+{items.map(item => (
+  <div key={item.id}>{item.nombre}</div>
+))}
+```
+
+## Mutar estado
+
+Mal:
+
+```tsx
+items.push(nuevo)
+setItems(items)
+```
+
+Bien:
+
+```tsx
+setItems([...items, nuevo])
+```
+
+## Ejecutar función sin querer
+
+Mal:
+
+```tsx
+<button onClick={eliminarItem(item.id)}>
+```
+
+Bien:
+
+```tsx
+<button onClick={() => eliminarItem(item.id)}>
+```
+
+## Formulario que recarga
+
+Solución:
+
+```tsx
+e.preventDefault()
+```
+
+## useState vacío sin tipo
+
+Mal:
+
+```tsx
+const [usuarios, setUsuarios] = useState([])
+```
+
+Bien:
+
+```tsx
+const [usuarios, setUsuarios] = useState<Usuario[]>([])
+```
+
+---
+
+# Consejo final
+
+En 40 minutos no busques hacer una página perfecta.
+
+Primero hacé que funcione:
+
+* formulario
+* lista
+* map
+* filtro
+* botones
+
+Después agregá Tailwind.
+
+Si te trabás, copiá la plantilla rápida y adaptá los nombres.

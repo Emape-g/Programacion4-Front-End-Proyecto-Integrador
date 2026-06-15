@@ -22,3 +22,19 @@ body {
   width: 100%;
   min-height: 100vh;
 }
+
+:root {
+  --chart-text: #6b7280;
+  --chart-grid: #e5e7eb;
+  --chart-border: #d1d5db;
+  --chart-tooltip-bg: #ffffff;
+  --chart-tooltip-text: #111827;
+}
+
+.dark {
+  --chart-text: #9ca3af;
+  --chart-grid: #374151;
+  --chart-border: #4b5563;
+  --chart-tooltip-bg: #111827;
+  --chart-tooltip-text: #f9fafb;
+}

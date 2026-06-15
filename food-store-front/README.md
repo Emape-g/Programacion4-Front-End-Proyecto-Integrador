@@ -1,73 +1,60 @@
-# React + TypeScript + Vite
+# FoodStore Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Frontend del proyecto integrador de Programacion 4. Incluye catalogo publico, carrito persistente, perfil y direcciones, checkout, Mercado Pago, seguimiento de pedidos y panel administrativo.
 
-Currently, two official plugins are available:
+## Requisitos
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Node.js 20 o superior
+- Backend FoodStore disponible
+- Backend configurado con credenciales sandbox de Mercado Pago
 
-## React Compiler
+## Configuracion
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1. Instalar dependencias:
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```powershell
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+2. Crear `.env` tomando `.env.example` como referencia:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```env
+VITE_API_URL=http://127.0.0.1:8000/api/v1
 ```
+
+3. Iniciar el frontend:
+
+```powershell
+npm run dev
+```
+
+La terminal muestra la URL local de Vite, normalmente `http://localhost:5173`.
+
+## Funcionalidades
+
+- Catalogo publico con busqueda, categorias, paginacion y detalle.
+- Carrito Zustand persistente, cantidades unicas y remocion de ingredientes permitidos.
+- Registro, login JWT, refresh automatico, perfil y multiples direcciones.
+- Checkout con confirmacion, direccion principal y formas de pago habilitadas.
+- Mercado Pago Checkout Pro mediante preferencia creada por el backend.
+- Listado, detalle, historial y seguimiento automatico de pedidos.
+- Administracion de pedidos, productos, stock, categorias, ingredientes, usuarios y roles.
+- Carga de imagenes a Cloudinary a traves del backend.
+- Dashboard con KPIs y cuatro graficos Recharts.
+- Tema claro/oscuro y navegacion responsive.
+
+## Validacion
+
+```powershell
+npm run lint
+npm run build
+```
+
+## Roles
+
+- `CLIENT`: compra, perfil y pedidos propios.
+- `ADMIN`: acceso administrativo completo.
+- `PEDIDOS`: gestion de pedidos.
+- `STOCK`: gestion de catalogo y existencias.
+
+El frontend no modifica el stock localmente: la creacion y cancelacion de pedidos delegan esa transaccion al backend.

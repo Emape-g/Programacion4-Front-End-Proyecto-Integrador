@@ -4,8 +4,9 @@ export interface Ingrediente {
   id: number;
   nombre: string;
   descripcion?: string;
+  stock_cantidad: number;
   es_alergeno: boolean;
-  delete_at: string | null;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -15,7 +16,12 @@ export interface IngredientesResponse {
   total: number;
 }
 
-type IngredientePayload = Omit<Ingrediente, 'id' | 'created_at' | 'updated_at'>;
+export interface IngredientePayload {
+  nombre: string;
+  descripcion?: string;
+  stock_cantidad: number;
+  es_alergeno: boolean;
+}
 
 export interface IngredientesFiltros {
   offset?: number;

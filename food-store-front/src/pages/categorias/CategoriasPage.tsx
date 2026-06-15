@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { Pencil, Plus, Trash2, Search, ArrowUpDown } from 'lucide-react';
 import { Modal } from '../../components/ui/Modal';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
@@ -11,6 +12,7 @@ import {
 } from '../../api/categorias';
 import type { Categoria } from '../../api/categorias';
 import { useDebounce } from '../../hooks/useDebounce';
+import { uploadImagen } from '../../api/cliente';
 
 interface FormState {
   nombre: string;
@@ -20,7 +22,12 @@ interface FormState {
 }
 
 const LIMIT = 10;
-const EMPTY_FORM: FormState = { nombre: '', descripcion: '', padre_id: null, imagen_url: '' };
+const EMPTY_FORM: FormState = {
+  nombre: '',
+  descripcion: '',
+  padre_id: null,
+  imagen_url: '',
+};
 
 export function CategoriasPage() {
   const [offset, setOffset] = useState(0);
@@ -39,6 +46,7 @@ export function CategoriasPage() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<Categoria | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -62,7 +70,7 @@ export function CategoriasPage() {
   }, [offset, refreshKey, debouncedSearch, orden]);
 
   useEffect(() => {
-    getCategorias({ offset: 0, limit: 1000 }).then((res) => setAllCategorias(res.data));
+    getCategorias({ offset: 0, limit: 100 }).then((res) => setAllCategorias(res.data));
   }, [refreshKey]);
 
   function refresh() { setRefreshKey((k) => k + 1); }
@@ -71,6 +79,24 @@ export function CategoriasPage() {
     if (!padreId) return '—';
     const p = allCategorias.find((c) => c.id === padreId);
     return p ? p.nombre : `#${padreId}`;
+  }
+
+  function renderTree(parentId: number | null = null, level = 0): ReactNode {
+    const children = allCategorias.filter((c) => (c.padre_id ?? null) === parentId);
+    if (!children.length) return null;
+    return (
+      <div className={level === 0 ? 'space-y-2' : 'ml-5 mt-2 space-y-2 border-l border-gray-200 pl-4 dark:border-gray-700'}>
+        {children.map((categoria) => (
+          <div key={categoria.id}>
+            <div className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm dark:bg-gray-900/40">
+              <span className="font-medium text-gray-900 dark:text-white">{categoria.nombre}</span>
+              {categoria.descripcion && <span className="text-gray-400">· {categoria.descripcion}</span>}
+            </div>
+            {renderTree(categoria.id, level + 1)}
+          </div>
+        ))}
+      </div>
+    );
   }
 
   function openCreate() {
@@ -130,6 +156,20 @@ export function CategoriasPage() {
     }
   }
 
+  async function handleImageUpload(file: File | undefined) {
+    if (!file) return;
+    setUploading(true);
+    setFormError('');
+    try {
+      const image = await uploadImagen(file, 'categorias');
+      setForm((current) => ({ ...current, imagen_url: image.secure_url }));
+    } catch {
+      setFormError('No se pudo subir la imagen.');
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function handleDelete() {
     if (!deleteTarget) return;
     setDeleting(true);
@@ -174,6 +214,11 @@ export function CategoriasPage() {
           <ArrowUpDown size={14} />
           {orden === 'desc' ? 'Más recientes' : 'Más antiguos'}
         </button>
+      </div>
+
+      <div className="mb-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Arbol de categorias</h2>
+        {allCategorias.length ? renderTree() : <p className="text-sm text-gray-400">No hay categorias cargadas.</p>}
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
@@ -323,6 +368,13 @@ export function CategoriasPage() {
               placeholder="https://ejemplo.com/img/categoria.png"
               className="w-full px-3 py-2.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-[#2a7a8a]/30 focus:border-[#2a7a8a] transition-colors"
             />
+            <div className="mt-2 flex items-center gap-3">
+              <label className="cursor-pointer rounded-lg border border-[#2a7a8a] px-3 py-2 text-sm font-medium text-[#2a7a8a]">
+                {uploading ? 'Subiendo...' : 'Subir a Cloudinary'}
+                <input type="file" accept="image/*" disabled={uploading} onChange={(event) => handleImageUpload(event.target.files?.[0])} className="sr-only" />
+              </label>
+              {form.imagen_url && <img src={form.imagen_url} alt="Vista previa" className="h-12 w-12 rounded-lg border border-gray-200 object-cover" />}
+            </div>
           </div>
 
           {formError && (
