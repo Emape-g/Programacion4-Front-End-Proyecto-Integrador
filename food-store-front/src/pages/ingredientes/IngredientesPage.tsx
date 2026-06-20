@@ -167,7 +167,7 @@ export function IngredientesPage() {
     if (nombre.length < 2) { setFormError('Mínimo 2 caracteres'); return; }
     if (nombre.length > 100) { setFormError('Máximo 100 caracteres'); return; }
     const stock = Number(form.stock_cantidad);
-    if (!Number.isInteger(stock) || stock < 0) { setFormError('El stock debe ser un entero mayor o igual a 0'); return; }
+    if (Number.isNaN(stock) || stock < 0) { setFormError('El stock debe ser un numero mayor o igual a 0'); return; }
     const unidadId = Number(form.unidad_medida_id);
     if (!Number.isInteger(unidadId) || unidadId <= 0) { setFormError('Seleccioná en qué formato estás cargando la cantidad'); return; }
     const unidad = unidades.find((item) => item.id === unidadId);
@@ -435,8 +435,9 @@ export function IngredientesPage() {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Cantidad disponible
               </label>
-              <input
+                <input
                 type="number"
+                step="0.001"
                 min="0"
                 value={form.stock_cantidad}
                 onChange={(e) => setForm((p) => ({ ...p, stock_cantidad: e.target.value }))}

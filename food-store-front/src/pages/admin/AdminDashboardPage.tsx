@@ -20,6 +20,7 @@ function ChartCard({ title, children }: { title: string; children: ReactNode }) 
 
 const axisTick = { fontSize: 11, fill: 'var(--chart-text)' };
 const tooltipStyle = { backgroundColor: 'var(--chart-tooltip-bg)', borderColor: 'var(--chart-border)', borderRadius: 8, color: 'var(--chart-tooltip-text)' };
+const autoRefresh = { refetchInterval: 5_000, refetchOnWindowFocus: true };
 
 export function AdminDashboardPage() {
   const range = useMemo(() => {
@@ -28,11 +29,11 @@ export function AdminDashboardPage() {
     desde.setDate(hasta.getDate() - 29);
     return { desde: isoDate(desde), hasta: isoDate(hasta) };
   }, []);
-  const resumen = useQuery({ queryKey: ['estadisticas', 'resumen'], queryFn: getResumenEstadisticas });
-  const ventas = useQuery({ queryKey: ['estadisticas', 'ventas', range], queryFn: () => getVentas(range.desde, range.hasta) });
-  const productos = useQuery({ queryKey: ['estadisticas', 'productos-top'], queryFn: () => getProductosTop(8) });
-  const estados = useQuery({ queryKey: ['estadisticas', 'pedidos-estado'], queryFn: getPedidosPorEstado });
-  const ingresos = useQuery({ queryKey: ['estadisticas', 'ingresos', range], queryFn: () => getIngresos(range.desde, range.hasta) });
+  const resumen = useQuery({ queryKey: ['estadisticas', 'resumen'], queryFn: getResumenEstadisticas, ...autoRefresh });
+  const ventas = useQuery({ queryKey: ['estadisticas', 'ventas', range], queryFn: () => getVentas(range.desde, range.hasta), ...autoRefresh });
+  const productos = useQuery({ queryKey: ['estadisticas', 'productos-top'], queryFn: () => getProductosTop(8), ...autoRefresh });
+  const estados = useQuery({ queryKey: ['estadisticas', 'pedidos-estado'], queryFn: getPedidosPorEstado, ...autoRefresh });
+  const ingresos = useQuery({ queryKey: ['estadisticas', 'ingresos', range], queryFn: () => getIngresos(range.desde, range.hasta), ...autoRefresh });
   const loading = resumen.isLoading || ventas.isLoading || productos.isLoading || estados.isLoading || ingresos.isLoading;
   const hasError = resumen.isError || ventas.isError || productos.isError || estados.isError || ingresos.isError;
   const cards = [

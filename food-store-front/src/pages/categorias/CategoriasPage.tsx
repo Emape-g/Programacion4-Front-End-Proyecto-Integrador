@@ -22,6 +22,7 @@ interface FormState {
 }
 
 const LIMIT = 10;
+const FETCH_LIMIT = 100;
 const EMPTY_FORM: FormState = {
   nombre: '',
   descripcion: '',
@@ -32,14 +33,11 @@ const EMPTY_FORM: FormState = {
 export function CategoriasPage() {
   const [offset, setOffset] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [categorias, setCategorias] = useState<Categoria[]>([]);
-  const [total, setTotal] = useState(0);
+  const [allCategorias, setAllCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [orden, setOrden] = useState<'asc' | 'desc'>('desc');
   const debouncedSearch = useDebounce(search, 350);
-
-  const [allCategorias, setAllCategorias] = useState<Categoria[]>([]);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Categoria | null>(null);
@@ -56,10 +54,15 @@ export function CategoriasPage() {
     async function fetchData() {
       setLoading(true);
       try {
-        const res = await getCategorias({ offset, limit: LIMIT, nombre: debouncedSearch || undefined, orden });
+        const res = await getCategorias({ offset: 0, limit: FETCH_LIMIT });
         if (!cancelled) {
-          setCategorias(res.data);
-          setTotal(res.total);
+          let lista = res.data;
+          while (lista.length < res.total) {
+            const siguiente = await getCategorias({ offset: lista.length, limit: FETCH_LIMIT });
+            if (siguiente.data.length === 0) break;
+            lista = [...lista, ...siguiente.data];
+          }
+          setAllCategorias(lista);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -67,11 +70,22 @@ export function CategoriasPage() {
     }
     fetchData();
     return () => { cancelled = true; };
-  }, [offset, refreshKey, debouncedSearch, orden]);
-
-  useEffect(() => {
-    getCategorias({ offset: 0, limit: 100 }).then((res) => setAllCategorias(res.data));
   }, [refreshKey]);
+
+  const categoriasFiltradas = allCategorias
+    .filter((categoria) => {
+      const term = debouncedSearch.trim().toLowerCase();
+      if (!term) return true;
+      return [categoria.nombre, categoria.descripcion ?? ''].some((value) => value.toLowerCase().includes(term));
+    })
+    .sort((a, b) => {
+      const fechaA = new Date(a.created_at).getTime();
+      const fechaB = new Date(b.created_at).getTime();
+      return orden === 'asc' ? fechaA - fechaB : fechaB - fechaA;
+    });
+  const safeOffset = offset >= categoriasFiltradas.length ? 0 : offset;
+  const categorias = categoriasFiltradas.slice(safeOffset, safeOffset + LIMIT);
+  const total = categoriasFiltradas.length;
 
   function refresh() { setRefreshKey((k) => k + 1); }
 
@@ -259,7 +273,7 @@ export function CategoriasPage() {
                     key={item.id}
                     className="border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
                   >
-                    <td className="px-4 py-3.5 text-gray-400 dark:text-gray-500 text-xs">{offset + idx + 1}</td>
+                    <td className="px-4 py-3.5 text-gray-400 dark:text-gray-500 text-xs">{safeOffset + idx + 1}</td>
                     <td className="px-4 py-3.5 font-medium text-gray-900 dark:text-white">{item.nombre}</td>
                     <td className="px-4 py-3.5 text-gray-500 dark:text-gray-400 max-w-xs truncate">{item.descripcion || '—'}</td>
                     <td className="px-4 py-3.5 text-gray-500 dark:text-gray-400">{parentName(item.padre_id)}</td>

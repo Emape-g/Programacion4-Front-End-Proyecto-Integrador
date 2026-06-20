@@ -20,6 +20,10 @@ interface Ingrediente {
   id: number;
   nombre: string;
   descripcion?: string;
+  stock_cantidad: number | string;
+  precio_unitario?: number | string | null;
+  unidad_medida_id?: number | null;
+  unidad_simbolo?: string | null;
 }
 
 interface IngredienteProductoTemp {
@@ -29,6 +33,7 @@ interface IngredienteProductoTemp {
   unidad_medida_id?: number;
   cantidad: number;
   precio_unitario: number;
+  stock_disponible: number;
   es_removible: boolean;
 }
 
@@ -37,7 +42,8 @@ interface ProductoDetalle {
   nombre: string;
   descripcion?: string | null;
   precio_base: number | string;
-  unidad_venta_id: number;
+  unidad_venta_id?: number | null;
+  unidad_venta_simbolo?: string | null;
   imagenes_url?: string[];
   stock_cantidad: number | string;
   disponible: boolean;
@@ -93,7 +99,6 @@ export default function ProductNuevo() {
   const [agregado, setAgregado] = useState("");
   const [unidadVentaId, setUnidadVentaId] = useState("");
   const [categoriaId, setCategoriaId] = useState("");
-  const [stockCantidad, setStockCantidad] = useState("");
   const [imagenesUrl, setImagenesUrl] = useState("");
   const [disponible, setDisponible] = useState(true);
 
@@ -115,6 +120,7 @@ export default function ProductNuevo() {
   const [ingredientesProducto, setIngredientesProducto] = useState<
     IngredienteProductoTemp[]
   >([]);
+  const [cantidadesEditando, setCantidadesEditando] = useState<Record<number, string>>({});
   const [categoriaOriginalIds, setCategoriaOriginalIds] = useState<number[]>([]);
   const [ingredienteOriginalIds, setIngredienteOriginalIds] = useState<number[]>([]);
 
@@ -185,13 +191,16 @@ export default function ProductNuevo() {
 
           const ingredientesIniciales = ingredientesOriginales.map((ing) => {
             const preference = getIngredientUnitPreference(ing.ingrediente_id);
+            const ingredienteBase = listaIngredientes.find((ingrediente) => ingrediente.id === ing.ingrediente_id);
+            const precioUnitario = ingredienteBase?.precio_unitario ?? preference?.precio_unitario ?? 0;
             return {
               ingrediente_id: ing.ingrediente_id,
               nombre: ing.nombre_ingrediente,
               unidad: ing.unidad_simbolo ?? preference?.unidad_simbolo ?? "-",
               unidad_medida_id: ing.unidad_medida_id ?? preference?.unidad_medida_id,
               cantidad: Number(ing.cantidad),
-              precio_unitario: preference?.precio_unitario ?? 0,
+              precio_unitario: Number(precioUnitario) || 0,
+              stock_disponible: Number(ingredienteBase?.stock_cantidad ?? 0),
               es_removible: ing.es_removible,
             };
           });
@@ -211,11 +220,10 @@ export default function ProductNuevo() {
               ? agregadoInicial.toFixed(2)
               : ""
           );
-          setUnidadVentaId(String(producto.unidad_venta_id ?? ""));
+          setUnidadVentaId(String(producto.unidad_venta_id ?? listaUnidadesFiltradas[0]?.id ?? ""));
           setCategoriaId(
             categoriaPrincipal ? String(categoriaPrincipal.categoria_id) : ""
           );
-          setStockCantidad(String(producto.stock_cantidad ?? ""));
           setImagenesUrl((producto.imagenes_url ?? []).join(", "));
           setDisponible(Boolean(producto.disponible));
           setIngredientesProducto(ingredientesIniciales);
@@ -256,6 +264,41 @@ export default function ProductNuevo() {
       (Number.isNaN(agregadoNumero) ? 0 : agregadoNumero)
     );
   }, [costoEstimadoTotal, agregado]);
+
+  const stockCalculado = useMemo(() => {
+    if (ingredientesProducto.length === 0) return 0;
+    const unidadesDisponibles = ingredientesProducto.map((ingrediente) => {
+      if (!ingrediente.cantidad || ingrediente.cantidad <= 0) return 0;
+      return Math.floor(Number(ingrediente.stock_disponible) / ingrediente.cantidad);
+    });
+    return Math.max(0, Math.min(...unidadesDisponibles));
+  }, [ingredientesProducto]);
+
+  const ingredientesFaltantes = useMemo(() => {
+    return ingredientesProducto
+      .map((ingrediente) => {
+        const necesario = Number(ingrediente.cantidad);
+        const disponible = Number(ingrediente.stock_disponible);
+        const faltante = necesario - disponible;
+        return {
+          nombre: ingrediente.nombre,
+          unidad: ingrediente.unidad,
+          faltante: Number(faltante.toFixed(3)),
+        };
+      })
+      .filter((ingrediente) => ingrediente.faltante > 0);
+  }, [ingredientesProducto]);
+
+  function cantidadTexto(cantidad: number) {
+    return Number.isInteger(cantidad) ? String(cantidad) : cantidad.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+  }
+
+  function mensajeStockInsuficiente() {
+    const detalle = ingredientesFaltantes
+      .map((ingrediente) => `${ingrediente.nombre}: faltan ${cantidadTexto(ingrediente.faltante)} ${ingrediente.unidad}`)
+      .join(', ');
+    return `No se puede guardar el producto porque no hay stock suficiente para preparar 1 unidad.${detalle ? ` ${detalle}.` : ''}`;
+  }
 
   function limpiarIngredienteForm() {
     setBusquedaIngrediente("");
@@ -314,6 +357,7 @@ export default function ProductNuevo() {
       unidad_medida_id: unidadId,
       cantidad,
       precio_unitario: precio,
+      stock_disponible: Number(ingredienteSeleccionado.stock_cantidad ?? 0),
       es_removible: esRemovible,
     };
 
@@ -335,6 +379,21 @@ export default function ProductNuevo() {
       prev.map((item) =>
         item.ingrediente_id === id
           ? { ...item, precio_unitario: precio }
+          : item
+      )
+    );
+  }
+
+  function actualizarCantidadIngrediente(id: number, cantidadTexto: string) {
+    setCantidadesEditando((prev) => ({ ...prev, [id]: cantidadTexto }));
+    if (cantidadTexto === "" || cantidadTexto === "0" || cantidadTexto.endsWith(".")) return;
+    const cantidad = Number(cantidadTexto);
+    if (Number.isNaN(cantidad) || cantidad < 0) return;
+
+    setIngredientesProducto((prev) =>
+      prev.map((item) =>
+        item.ingrediente_id === id
+          ? { ...item, cantidad }
           : item
       )
     );
@@ -377,24 +436,14 @@ export default function ProductNuevo() {
       )
     );
 
-    const ingredienteActualIds = ingredientesProducto.map(
-      (ing) => ing.ingrediente_id
-    );
-    const ingredientesAEliminar = ingredienteOriginalIds.filter(
-      (id) => !ingredienteActualIds.includes(id)
-    );
-    const ingredientesAAgregar = ingredientesProducto.filter(
-      (ing) => !ingredienteOriginalIds.includes(ing.ingrediente_id)
-    );
-
     await Promise.all(
-      ingredientesAEliminar.map((id) =>
+      ingredienteOriginalIds.map((id) =>
         apiClient.delete(`/productos/${productoIdActual}/ingredientes/${id}`)
       )
     );
 
     await Promise.all(
-      ingredientesAAgregar.map((ing) =>
+      ingredientesProducto.map((ing) =>
         apiClient.post(`/productos/${productoIdActual}/ingredientes`, {
           ingrediente_id: ing.ingrediente_id,
           cantidad: ing.cantidad,
@@ -408,6 +457,7 @@ export default function ProductNuevo() {
   async function guardarProducto() {
     setError("");
     const precioFinal = precioVentaManual ? precioVenta : precioSugerido.toFixed(2);
+    const unidadVentaSeleccionada = unidadVentaId || (unidades[0] ? String(unidades[0].id) : "");
 
     if (!nombre.trim()) {
       setError("El nombre del producto es obligatorio.");
@@ -425,7 +475,7 @@ export default function ProductNuevo() {
       return;
     }
 
-    if (!unidadVentaId) {
+    if (!unidadVentaSeleccionada) {
       setError("Seleccioná una unidad de venta.");
       return;
     }
@@ -440,6 +490,16 @@ export default function ProductNuevo() {
       return;
     }
 
+    if (ingredientesProducto.some((ing) => !ing.cantidad || ing.cantidad <= 0)) {
+      setError("Todas las cantidades de ingredientes deben ser mayores a 0.");
+      return;
+    }
+
+    if (ingredientesFaltantes.length > 0 || stockCalculado <= 0) {
+      setError(mensajeStockInsuficiente());
+      return;
+    }
+
     setGuardando(true);
 
     try {
@@ -447,12 +507,12 @@ export default function ProductNuevo() {
         nombre: nombre.trim(),
         descripcion: descripcion.trim(),
         precio_base: Number(precioFinal),
-        unidad_venta_id: Number(unidadVentaId),
+        unidad_venta_id: Number(unidadVentaSeleccionada),
         imagenes_url: imagenesUrl
           .split(",")
           .map((url) => url.trim())
           .filter(Boolean),
-        stock_cantidad: Number(stockCantidad) || 0,
+        stock_cantidad: stockCalculado,
         disponible,
         categorias: [
           {
@@ -646,24 +706,35 @@ export default function ProductNuevo() {
 
               <div>
                 <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5 uppercase tracking-wide">
-                  Stock inicial
+                  Unidad de venta <span className="text-red-400">*</span>
                 </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={stockCantidad}
-                  onChange={(e) => setStockCantidad(e.target.value)}
-                  placeholder="0"
+
+                <select
+                  value={unidadVentaId}
+                  onChange={(e) => setUnidadVentaId(e.target.value)}
                   className="w-full px-4 py-2.5 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#2a7a8a]/30 focus:border-[#2a7a8a] transition-colors"
-                />
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <label className="cursor-pointer rounded-lg border border-[#2a7a8a] px-3 py-2 text-sm font-medium text-[#2a7a8a] hover:bg-[#2a7a8a]/5">
-                    {subiendoImagen ? "Subiendo..." : "Subir imagen"}
-                    <input type="file" accept="image/*" disabled={subiendoImagen} onChange={(event) => subirImagen(event.target.files?.[0])} className="sr-only" />
-                  </label>
-                  <span className="text-xs text-gray-500">JPG, PNG o WebP. La imagen se almacena en Cloudinary.</span>
+                >
+                  <option value="">Seleccionar unidad</option>
+                  {unidades.map((unidad) => (
+                    <option key={unidad.id} value={unidad.id}>
+                      {unidad.nombre} ({unidad.simbolo})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5 uppercase tracking-wide">
+                  Stock calculado
+                </label>
+                <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-600 dark:bg-gray-900/40">
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{stockCalculado}</p>
                 </div>
-                {imagenesUrl && <div className="mt-3 flex gap-2 overflow-x-auto">{imagenesUrl.split(",").map((url) => url.trim()).filter(Boolean).map((url) => <img key={url} src={url} alt="Vista previa" className="h-20 w-24 rounded-lg border border-gray-200 object-cover" />)}</div>}
+                {ingredientesFaltantes.length > 0 && (
+                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+                    {mensajeStockInsuficiente()}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -696,6 +767,14 @@ export default function ProductNuevo() {
                   placeholder="https://imagen1.jpg, https://imagen2.jpg"
                   className="w-full px-4 py-2.5 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#2a7a8a]/30 focus:border-[#2a7a8a] transition-colors"
                 />
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <label className="cursor-pointer rounded-lg border border-[#2a7a8a] px-3 py-2 text-sm font-medium text-[#2a7a8a] hover:bg-[#2a7a8a]/5">
+                    {subiendoImagen ? "Subiendo..." : "Subir imagen"}
+                    <input type="file" accept="image/*" disabled={subiendoImagen} onChange={(event) => subirImagen(event.target.files?.[0])} className="sr-only" />
+                  </label>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">JPG, PNG o WebP. La imagen se almacena en Cloudinary.</span>
+                </div>
+                {imagenesUrl && <div className="mt-3 flex gap-2 overflow-x-auto">{imagenesUrl.split(",").map((url) => url.trim()).filter(Boolean).map((url) => <img key={url} src={url} alt="Vista previa" className="h-20 w-24 rounded-lg border border-gray-200 object-cover" />)}</div>}
               </div>
             </div>
           </section>
@@ -744,10 +823,18 @@ export default function ProductNuevo() {
                                 const preferredUnit = getIngredientUnitPreference(ingrediente.id);
                                 setIngredienteSeleccionado(ingrediente);
                                 setBusquedaIngrediente(ingrediente.nombre);
-                                setUnidadIngredienteId(preferredUnit ? String(preferredUnit.unidad_medida_id) : "");
+                                setUnidadIngredienteId(
+                                  ingrediente.unidad_medida_id
+                                    ? String(ingrediente.unidad_medida_id)
+                                    : preferredUnit
+                                      ? String(preferredUnit.unidad_medida_id)
+                                      : ""
+                                );
                                 setCostoUnitarioIngrediente(
-                                  preferredUnit?.precio_unitario !== undefined
-                                    ? String(preferredUnit.precio_unitario)
+                                  ingrediente.precio_unitario !== undefined && ingrediente.precio_unitario !== null
+                                    ? String(ingrediente.precio_unitario)
+                                    : preferredUnit?.precio_unitario !== undefined
+                                      ? String(preferredUnit.precio_unitario)
                                     : ""
                                 );
                                 setMostrarDropdownIngredientes(false);
@@ -853,8 +940,21 @@ export default function ProductNuevo() {
                         <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                           {item.unidad}
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
-                          {item.cantidad}
+                        <td className="px-6 py-4">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            min="0.001"
+                            step="0.001"
+                            value={cantidadesEditando[item.ingrediente_id] ?? String(item.cantidad)}
+                            onChange={(e) =>
+                              actualizarCantidadIngrediente(
+                                item.ingrediente_id,
+                                e.target.value
+                              )
+                            }
+                            className="w-28 px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#2a7a8a]/30 focus:border-[#2a7a8a] transition-colors"
+                          />
                         </td>
                         <td className="px-6 py-4">
                           <input

@@ -7,10 +7,17 @@ export const pedidoKeys = {
   detail: (id: number) => ['pedidos', 'detail', id] as const,
 };
 
-export function usePedidos(page = 1, size = 100, estado?: string) {
+export function usePedidos(
+  page = 1,
+  size = 100,
+  estado?: string,
+  options: { refetchInterval?: number | false } = {},
+) {
   return useQuery({
     queryKey: pedidoKeys.list(page, size, estado),
     queryFn: () => getPedidos(page, size, estado),
+    refetchInterval: options.refetchInterval,
+    refetchOnWindowFocus: true,
   });
 }
 

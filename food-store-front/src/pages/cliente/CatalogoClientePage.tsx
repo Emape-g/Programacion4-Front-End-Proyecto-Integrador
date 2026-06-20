@@ -39,14 +39,20 @@ export function CatalogoClientePage() {
     disponible: true,
     offset,
     limit: LIMIT,
+  }, {
+    refetchInterval: 5_000,
   });
   const categoriasQuery = useQuery({
     queryKey: ['categorias', 'catalogo'],
     queryFn: () => getCategorias({ offset: 0, limit: 100 }),
     staleTime: 60_000,
   });
-  const productos = (productosQuery.data?.data ?? []).filter((producto) => producto.disponible && producto.stock_cantidad > 0);
+  const productos = (productosQuery.data?.data ?? [])
+    .filter((producto) => producto.disponible && producto.stock_cantidad > 0);
   const total = productosQuery.data?.total ?? 0;
+  const selectedActual = selected
+    ? productosQuery.data?.data.find((producto) => producto.id === selected.id) ?? selected
+    : null;
 
   return (
     <div className="space-y-6">
@@ -114,9 +120,10 @@ export function CatalogoClientePage() {
 
       <Pagination total={total} limit={LIMIT} offset={offset} onPageChange={setOffset} />
 
-      <Modal isOpen={Boolean(selected)} onClose={() => setSelected(null)} title={selected?.nombre ?? 'Producto'} size="lg">
-        {selected && (
+      <Modal isOpen={Boolean(selectedActual)} onClose={() => setSelected(null)} title={selectedActual?.nombre ?? 'Producto'} size="lg">
+        {selectedActual && (
           (() => {
+            const selected = selectedActual;
             const selectedCartItem = items.find((item) => item.producto.id === selected.id);
             const cantidadEnCarrito = selectedCartItem?.cantidad ?? 0;
             const sinStockDisponible = cantidadEnCarrito >= selected.stock_cantidad;

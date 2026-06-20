@@ -1,14 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { CheckCircle2, CreditCard, ExternalLink, Minus, Plus, RefreshCw, ShoppingBag, Trash2 } from 'lucide-react';
-import { confirmarPagoMercadoPago, createPedido, crearPagoMercadoPago, getFormasPago, getMisDirecciones } from '../../api/cliente';
+import { cancelarPedido, confirmarPagoMercadoPago, createPedido, crearPagoMercadoPago, getFormasPago, getMisDirecciones } from '../../api/cliente';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { useAuth } from '../../hooks/useAuth';
 import { useCart } from '../../hooks/useCart';
 import { isClientUser } from '../../utils/roles';
-import type { DireccionEntrega, FormaPago, IngredienteProducto, PagoCrearResponse, Pedido } from '../../types/store';
+import type { DireccionEntrega, FormaPago, IngredienteProducto, PagoCrearResponse, Pedido, Producto } from '../../types/store';
+import {
+  validarStockActualCarrito,
+} from '../../utils/stockIngredientes';
 
 const DELIVERY_COST = 50;
+
+interface PendingMercadoPagoOrder {
+  pedido: Pedido;
+  preferencia: PagoCrearResponse | null;
+  estadoPago: string;
+}
 
 function money(value: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(value);
@@ -33,8 +43,13 @@ function stockRestante(stock: number, cantidad: number) {
   return Math.max(0, Number(stock) - cantidad);
 }
 
+function pendingPaymentKey(userId?: number) {
+  return userId ? `foodstore_mp_pending_${userId}` : null;
+}
+
 export function CarritoPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const { items, total, updateQuantity, updatePersonalizacion, removeItem, clearCart } = useCart();
   const [direcciones, setDirecciones] = useState<DireccionEntrega[]>([]);
@@ -49,6 +64,7 @@ export function CarritoPage() {
   const [pedidoCreado, setPedidoCreado] = useState<Pedido | null>(null);
   const [preferenciaPago, setPreferenciaPago] = useState<PagoCrearResponse | null>(null);
   const [comprobandoPago, setComprobandoPago] = useState(false);
+  const [cancelandoPendiente, setCancelandoPendiente] = useState(false);
   const [estadoPago, setEstadoPago] = useState('');
 
   useEffect(() => {
@@ -67,6 +83,43 @@ export function CarritoPage() {
       active = false;
     };
   }, [user]);
+
+  const pagoPendienteGuardado = useMemo(() => {
+    const key = pendingPaymentKey(user?.id);
+    if (!key) return null;
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    try {
+      const pending = JSON.parse(raw) as PendingMercadoPagoOrder;
+      return pending?.pedido?.id ? pending : null;
+    } catch {
+      localStorage.removeItem(key);
+      return null;
+    }
+  }, [user?.id]);
+
+  const pedidoMercadoPago = pedidoCreado ?? pagoPendienteGuardado?.pedido ?? null;
+  const preferenciaMercadoPago = preferenciaPago ?? pagoPendienteGuardado?.preferencia ?? null;
+  const estadoPagoActual = estadoPago || pagoPendienteGuardado?.estadoPago || '';
+
+  function guardarPagoPendiente(pedido: Pedido, preferencia: PagoCrearResponse | null, estado = '') {
+    const key = pendingPaymentKey(user?.id);
+    if (!key) return;
+    const pending: PendingMercadoPagoOrder = { pedido, preferencia, estadoPago: estado };
+    localStorage.setItem(key, JSON.stringify(pending));
+  }
+
+  function limpiarPagoPendiente() {
+    const key = pendingPaymentKey(user?.id);
+    if (key) localStorage.removeItem(key);
+    setPedidoCreado(null);
+    setPreferenciaPago(null);
+    setEstadoPago('');
+  }
+
+  function stockCalculado(item: { producto: Producto; personalizacion: number[] }) {
+    return Math.max(0, Number(item.producto.stock_cantidad ?? 0));
+  }
 
   const totalFinal = total + (items.length ? DELIVERY_COST : 0);
   const puedeConfirmar = useMemo(
@@ -98,6 +151,7 @@ export function CarritoPage() {
     setSubmitting(true);
     setError('');
     try {
+      await validarStockActualCarrito(items);
       const pedido = await createPedido({
         direccion_id: Number(direccionId),
         forma_pago_codigo: formaPago,
@@ -108,13 +162,18 @@ export function CarritoPage() {
           personalizacion: item.personalizacion,
         })),
       });
+      queryClient.invalidateQueries({ queryKey: ['estadisticas'] });
+      queryClient.invalidateQueries({ queryKey: ['productos'] });
+      queryClient.invalidateQueries({ queryKey: ['ingredientes'] });
       setPedidoCreado(pedido);
       if (formaPago === 'MERCADOPAGO') {
+        guardarPagoPendiente(pedido, null);
         const preference = await crearPagoMercadoPago(pedido.id);
         if (!preference.init_point) {
           throw new Error('Mercado Pago no devolvio una URL de pago.');
         }
         setPreferenciaPago(preference);
+        guardarPagoPendiente(pedido, preference);
         clearCart();
         return;
       }
@@ -130,15 +189,18 @@ export function CarritoPage() {
   }
 
   async function comprobarPago() {
-    if (!pedidoCreado) return;
+    if (!pedidoMercadoPago) return;
     setComprobandoPago(true);
     setError('');
     try {
-      const resultado = await confirmarPagoMercadoPago(pedidoCreado.id);
+      const resultado = await confirmarPagoMercadoPago(pedidoMercadoPago.id);
       const estado = resultado.estado ?? 'pendiente';
       setEstadoPago(estado);
       if (estado === 'aprobado') {
-        navigate(`/pedidos/${pedidoCreado.id}`, { replace: true });
+        limpiarPagoPendiente();
+        navigate(`/pedidos/${pedidoMercadoPago.id}`, { replace: true });
+      } else {
+        guardarPagoPendiente(pedidoMercadoPago, preferenciaMercadoPago, estado);
       }
     } catch (requestError) {
       const detail = (requestError as { response?: { data?: { detail?: string } } }).response?.data?.detail;
@@ -149,15 +211,16 @@ export function CarritoPage() {
   }
 
   async function reintentarPago() {
-    if (!pedidoCreado) return;
+    if (!pedidoMercadoPago) return;
     setSubmitting(true);
     setError('');
     try {
-      const preference = await crearPagoMercadoPago(pedidoCreado.id);
+      const preference = await crearPagoMercadoPago(pedidoMercadoPago.id);
       if (!preference.init_point) {
         throw new Error('Mercado Pago no devolvio una URL de pago.');
       }
       setPreferenciaPago(preference);
+      guardarPagoPendiente(pedidoMercadoPago, preference, estadoPagoActual);
       clearCart();
     } catch (requestError) {
       const detail = (requestError as { response?: { data?: { detail?: string } } }).response?.data?.detail;
@@ -168,7 +231,25 @@ export function CarritoPage() {
     }
   }
 
-  if (pedidoCreado && formaPago === 'MERCADOPAGO') {
+  async function cancelarPagoPendiente() {
+    if (!pedidoMercadoPago) return;
+    setCancelandoPendiente(true);
+    setError('');
+    try {
+      await cancelarPedido(pedidoMercadoPago.id);
+      queryClient.invalidateQueries({ queryKey: ['estadisticas'] });
+      queryClient.invalidateQueries({ queryKey: ['productos'] });
+      queryClient.invalidateQueries({ queryKey: ['ingredientes'] });
+      limpiarPagoPendiente();
+    } catch (requestError) {
+      const detail = (requestError as { response?: { data?: { detail?: string } } }).response?.data?.detail;
+      setError(detail ?? 'No se pudo cancelar el pedido pendiente.');
+    } finally {
+      setCancelandoPendiente(false);
+    }
+  }
+
+  if (pedidoMercadoPago && (formaPago === 'MERCADOPAGO' || preferenciaMercadoPago || pagoPendienteGuardado)) {
     return (
       <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
@@ -177,17 +258,17 @@ export function CarritoPage() {
               <CreditCard size={22} />
             </span>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Pagar pedido #{pedidoCreado.id}</h1>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Pagar pedido #{pedidoMercadoPago.id}</h1>
               <p className="text-sm text-gray-500 dark:text-gray-400">El pago se procesa de forma segura en Mercado Pago.</p>
             </div>
           </div>
-          {preferenciaPago?.init_point ? (
+          {preferenciaMercadoPago?.init_point ? (
             <div className="space-y-4">
               <p className="text-sm text-gray-600 dark:text-gray-300">
                 Abre Mercado Pago, completa el pago de prueba y luego vuelve a esta pantalla para comprobarlo.
               </p>
               <a
-                href={preferenciaPago.init_point}
+                href={preferenciaMercadoPago.init_point}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#009ee3] px-4 py-3 text-sm font-semibold text-white hover:bg-[#008dcc]"
@@ -201,15 +282,23 @@ export function CarritoPage() {
                 onClick={comprobarPago}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[#2a7a8a] px-4 py-3 text-sm font-semibold text-[#2a7a8a] hover:bg-[#2a7a8a]/5 disabled:opacity-50"
               >
-                {estadoPago === 'aprobado' ? <CheckCircle2 size={17} /> : <RefreshCw size={17} className={comprobandoPago ? 'animate-spin' : ''} />}
+                {estadoPagoActual === 'aprobado' ? <CheckCircle2 size={17} /> : <RefreshCw size={17} className={comprobandoPago ? 'animate-spin' : ''} />}
                 {comprobandoPago ? 'Comprobando...' : 'Ya pague, comprobar estado'}
               </button>
-              {estadoPago && estadoPago !== 'aprobado' && (
+              {estadoPagoActual && estadoPagoActual !== 'aprobado' && (
                 <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
-                  El pago todavía figura como {estadoPago}. Espera unos segundos y vuelve a comprobar.
+                  El pago todavía figura como {estadoPagoActual}. Espera unos segundos y vuelve a comprobar.
                 </p>
               )}
               {error && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
+              <button
+                type="button"
+                disabled={cancelandoPendiente}
+                onClick={cancelarPagoPendiente}
+                className="inline-flex w-full items-center justify-center rounded-lg border border-red-200 px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:hover:bg-red-950/30"
+              >
+                {cancelandoPendiente ? 'Cancelando...' : 'Cancelar pedido pendiente'}
+              </button>
             </div>
           ) : (
             <div className="space-y-3">
@@ -225,13 +314,24 @@ export function CarritoPage() {
                 <RefreshCw size={17} className={submitting ? 'animate-spin' : ''} />
                 {submitting ? 'Creando pago...' : 'Reintentar Mercado Pago'}
               </button>
+              <button
+                type="button"
+                disabled={cancelandoPendiente}
+                onClick={cancelarPagoPendiente}
+                className="inline-flex w-full items-center justify-center rounded-lg border border-red-200 px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:hover:bg-red-950/30"
+              >
+                {cancelandoPendiente ? 'Cancelando...' : 'Cancelar pedido pendiente'}
+              </button>
             </div>
           )}
         </section>
         <aside className="h-fit rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+            Tenes un pedido de Mercado Pago pendiente. Para hacer otro pedido, primero tenes que pagarlo o cancelarlo.
+          </p>
           <p className="text-sm text-gray-500 dark:text-gray-400">Total del pedido</p>
-          <p className="mt-1 text-3xl font-bold text-gray-900 dark:text-white">{money(Number(pedidoCreado.total))}</p>
-          <Link to={`/pedidos/${pedidoCreado.id}`} className="mt-5 block text-sm font-medium text-[#2a7a8a]">
+          <p className="mt-1 text-3xl font-bold text-gray-900 dark:text-white">{money(Number(pedidoMercadoPago.total))}</p>
+          <Link to={`/pedidos/${pedidoMercadoPago.id}`} className="mt-5 block text-sm font-medium text-[#2a7a8a]">
             Ver pedido pendiente
           </Link>
         </aside>
@@ -261,7 +361,7 @@ export function CarritoPage() {
                   <h2 className="font-semibold text-gray-900 dark:text-white">{item.producto.nombre}</h2>
                   <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{money(Number(item.producto.precio_base))}</p>
                   <p className="mt-1 text-sm font-medium text-gray-600 dark:text-gray-300">
-                    Tenes {item.cantidad} de {item.producto.stock_cantidad}. Quedan {stockRestante(item.producto.stock_cantidad, item.cantidad)}.
+                    Tenes {item.cantidad} de {stockCalculado(item)}. Quedan {stockRestante(stockCalculado(item), item.cantidad)}.
                   </p>
                   {removibles(item.producto.ingredientes).length > 0 && (
                     <div className="mt-3">
@@ -294,7 +394,7 @@ export function CarritoPage() {
                   <div className="flex items-center gap-2">
                     <button onClick={() => updateQuantity(item.producto.id, item.cantidad - 1)} className="rounded-lg border border-gray-300 p-2 text-gray-700 dark:border-gray-600 dark:text-gray-200"><Minus size={14} /></button>
                     <span className="w-8 text-center text-sm font-semibold text-gray-900 dark:text-white">{item.cantidad}</span>
-                    <button onClick={() => updateQuantity(item.producto.id, item.cantidad + 1)} className="rounded-lg border border-gray-300 p-2 text-gray-700 dark:border-gray-600 dark:text-gray-200"><Plus size={14} /></button>
+                    <button disabled={item.cantidad >= stockCalculado(item)} onClick={() => updateQuantity(item.producto.id, Math.min(stockCalculado(item), item.cantidad + 1))} className="rounded-lg border border-gray-300 p-2 text-gray-700 disabled:opacity-40 dark:border-gray-600 dark:text-gray-200"><Plus size={14} /></button>
                     <button onClick={() => removeItem(item.producto.id)} className="rounded-lg p-2 text-red-600"><Trash2 size={16} /></button>
                   </div>
                   <strong className="text-gray-900 dark:text-white">{money(Number(item.producto.precio_base) * item.cantidad)}</strong>

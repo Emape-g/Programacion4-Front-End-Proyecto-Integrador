@@ -34,6 +34,12 @@ function cliente(pedido: Pedido) {
   return nombre || pedido.usuario_nombre || pedido.cliente_nombre || (pedido.usuario_id ? `Usuario #${pedido.usuario_id}` : 'Cliente no disponible');
 }
 
+function realtimeLabel(status: string) {
+  if (status === 'connected') return 'En tiempo real';
+  if (status === 'error' || status === 'disconnected') return 'Actualizacion automatica';
+  return 'Reconectando';
+}
+
 export function AdminPedidosPage() {
   useAdminOrdersFeed(true);
   const wsStatus = useWsStore((state) => state.status);
@@ -41,12 +47,15 @@ export function AdminPedidosPage() {
   const [estadoFilter, setEstadoFilter] = useState('');
   const [target, setTarget] = useState<{ pedido: Pedido; estado: EstadoPedido } | null>(null);
   const [motivo, setMotivo] = useState('');
-  const pedidosQuery = usePedidos(1, 100, estadoFilter || undefined);
+  const pedidosQuery = usePedidos(1, 100, estadoFilter || undefined, { refetchInterval: 5_000 });
   const pedidos = [...(pedidosQuery.data?.items ?? [])].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   const mutation = useMutation({
     mutationFn: () => cambiarEstadoPedido(target?.pedido.id ?? 0, target?.estado ?? 'PENDIENTE', motivo),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: pedidoKeys.all });
+      queryClient.invalidateQueries({ queryKey: ['estadisticas'] });
+      queryClient.invalidateQueries({ queryKey: ['productos'] });
+      queryClient.invalidateQueries({ queryKey: ['ingredientes'] });
       setTarget(null);
       setMotivo('');
     },
@@ -57,7 +66,7 @@ export function AdminPedidosPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div><h1 className="text-3xl font-bold text-gray-900 dark:text-white">Pedidos</h1><p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Gestion de estados y seguimiento operativo.</p></div>
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs text-gray-600 dark:border-gray-700 dark:text-gray-300"><Radio size={13} className={wsStatus === 'connected' ? 'text-green-600' : 'text-amber-600'} />{wsStatus === 'connected' ? 'En tiempo real' : 'Reconectando'}</span>
+          <span className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs text-gray-600 dark:border-gray-700 dark:text-gray-300"><Radio size={13} className={wsStatus === 'connected' ? 'text-green-600' : wsStatus === 'error' ? 'text-gray-500' : 'text-amber-600'} />{realtimeLabel(wsStatus)}</span>
           <select value={estadoFilter} onChange={(event) => setEstadoFilter(event.target.value)} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-white"><option value="">Todos</option>{Object.keys(NEXT_STATES).map((estado) => <option key={estado} value={estado}>{label(estado as EstadoPedido)}</option>)}</select>
           <button onClick={() => pedidosQuery.refetch()} className="rounded-lg border border-gray-300 p-2.5 text-gray-700 dark:border-gray-600 dark:text-gray-200" title="Actualizar"><RefreshCw size={16} /></button>
         </div>

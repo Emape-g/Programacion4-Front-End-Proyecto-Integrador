@@ -5,6 +5,8 @@ import { useWsStore } from '../store/wsStore';
 import { pedidoKeys } from './usePedidos';
 import type { OrderEvent, Pedido } from '../types/store';
 
+const MAX_RECONNECT_ATTEMPTS = 5;
+
 function wsBaseUrl() {
   const configured = import.meta.env.VITE_API_URL as string | undefined;
   if (!configured || configured.startsWith('/')) {
@@ -47,6 +49,10 @@ export function useAdminOrdersFeed(enabled: boolean) {
         if (disposed) return;
         attempt += 1;
         store.setReconnectAttempt(attempt);
+        if (attempt > MAX_RECONNECT_ATTEMPTS) {
+          store.setStatus('error');
+          return;
+        }
         const delay = Math.min(30_000, 1_000 * 2 ** Math.min(attempt, 5));
         retryTimer = window.setTimeout(connect, delay);
       };

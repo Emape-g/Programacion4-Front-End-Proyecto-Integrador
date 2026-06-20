@@ -23,6 +23,7 @@ export function LoginPage() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (loading) return;
     setError('');
     setLoading(true);
     try {
@@ -37,7 +38,15 @@ export function LoginPage() {
     } catch (err) {
       if (axios.isAxiosError(err) && err.response?.data) {
         const body = err.response.data as { detail?: string };
-        setError(body.detail ?? 'Credenciales invalidas');
+        if (err.response.status === 429) {
+          setError('Demasiados intentos seguidos. Espera unos segundos y volve a probar.');
+        } else if (err.response.status === 502) {
+          setError('No se pudo conectar con el backend. Verifica que el servidor este levantado en el puerto 8000.');
+        } else {
+          setError(body.detail ?? 'Credenciales invalidas');
+        }
+      } else if (axios.isAxiosError(err) && err.response?.status === 502) {
+        setError('No se pudo conectar con el backend. Verifica que el servidor este levantado en el puerto 8000.');
       } else {
         setError(err instanceof Error ? err.message : 'Error al iniciar sesion');
       }

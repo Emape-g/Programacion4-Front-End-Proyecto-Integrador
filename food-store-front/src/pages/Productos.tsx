@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Pencil, Plus, Trash2, Search, ArrowUpDown } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
@@ -8,6 +8,7 @@ import { useDebounce } from '../hooks/useDebounce';
 import apiClient from '../api/axiosClient';
 import { useAuth } from '../hooks/useAuth';
 import { isAdminUser } from '../utils/roles';
+import { getIngredientes } from '../api/ingredientes';
 
 interface CategoriaProducto {
   categoria_id: number;
@@ -40,6 +41,11 @@ interface Producto {
   updated_at: string;
 }
 
+interface IngredienteStock {
+  id: number;
+  stock_cantidad: number;
+}
+
 interface ProductosResponse {
   data: Producto[];
   total: number;
@@ -63,6 +69,18 @@ function ordenarProductos(productos: Producto[], orden: 'asc' | 'desc') {
   });
 }
 
+function stockCalculado(producto: Producto, ingredientes: IngredienteStock[]) {
+  const stockById = new Map(ingredientes.map((ingrediente) => [ingrediente.id, Number(ingrediente.stock_cantidad)]));
+  const cantidades = (producto.ingredientes ?? []).map((ingrediente) => {
+    const necesario = Number(ingrediente.cantidad);
+    const disponible = stockById.get(ingrediente.ingrediente_id);
+    if (!necesario || necesario <= 0 || disponible === undefined) return Number.POSITIVE_INFINITY;
+    return Math.floor(disponible / necesario);
+  });
+  const calculado = Math.min(...cantidades);
+  return Number.isFinite(calculado) ? Math.max(0, calculado) : Math.max(0, Number(producto.stock_cantidad ?? 0));
+}
+
 const LIMIT = 10;
 
 export default function Productos() {
@@ -81,11 +99,12 @@ export default function Productos() {
   const [deleteTarget, setDeleteTarget] = useState<Producto | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const hasLoadedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
     async function fetchData() {
-      setLoading(true);
+      if (!hasLoadedRef.current) setLoading(true);
       try {
         const params = {
           limit: 100,
@@ -116,23 +135,32 @@ export default function Productos() {
 
         const pagina = ordenarProductos(lista, orden).slice(offset, offset + LIMIT);
 
-        const conDetalle = await Promise.all(
-          pagina.map(async (p) => {
+        const [conDetalle, ingredientesStock] = await Promise.all([
+          Promise.all(pagina.map(async (p) => {
             try {
               const d = await apiClient.get<Producto>(`/productos/${p.id}`);
               return d.data;
             } catch {
               return p;
             }
-          }),
-        );
+          })),
+          getIngredientes({ offset: 0, limit: 1000 }).then((res) => res.data).catch(() => []),
+        ]);
+
+        const productosConStockCalculado = conDetalle.map((producto) => ({
+          ...producto,
+          stock_cantidad: stockCalculado(producto, ingredientesStock),
+        }));
 
         if (!cancelled) {
-          setProductos(conDetalle);
+          setProductos(productosConStockCalculado);
           setTotal(totalVal);
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          hasLoadedRef.current = true;
+          setLoading(false);
+        }
       }
     }
     fetchData();
@@ -144,6 +172,18 @@ export default function Productos() {
   function refresh() {
     setRefreshKey((k) => k + 1);
   }
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setRefreshKey((k) => k + 1);
+    }, 5_000);
+    const refreshOnFocus = () => setRefreshKey((k) => k + 1);
+    window.addEventListener('focus', refreshOnFocus);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshOnFocus);
+    };
+  }, []);
 
   function categoriasTexto(cats: CategoriaProducto[]): string {
     if (!cats?.length) return '—';

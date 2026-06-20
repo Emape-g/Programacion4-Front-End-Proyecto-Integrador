@@ -67,7 +67,7 @@ export function Header() {
               {pedidosRole && (
                 <>
                   {isAdminUser(user) && (
-                    <NavLink to="/admin" className={navClass}>
+                    <NavLink to="/admin" end className={navClass}>
                       Panel
                     </NavLink>
                   )}
@@ -202,7 +202,7 @@ export function Header() {
       {mobileMenuOpen && <nav className="border-t border-gray-200 bg-white px-5 py-3 dark:border-gray-700 dark:bg-gray-800 md:hidden">
         <div className="grid gap-1">
           {pedidosRole || catalogRole ? <>
-            {isAdminUser(user) && <NavLink onClick={() => setMobileMenuOpen(false)} to="/admin" className={navClass}>Panel</NavLink>}
+            {isAdminUser(user) && <NavLink onClick={() => setMobileMenuOpen(false)} to="/admin" end className={navClass}>Panel</NavLink>}
             {pedidosRole && <NavLink onClick={() => setMobileMenuOpen(false)} to="/admin/pedidos" className={navClass}>Pedidos</NavLink>}
             {isAdminUser(user) && <NavLink onClick={() => setMobileMenuOpen(false)} to="/admin/usuarios" className={navClass}>Usuarios</NavLink>}
             {catalogRole && <><NavLink onClick={() => setMobileMenuOpen(false)} to="/productos" className={navClass}>Productos</NavLink><NavLink onClick={() => setMobileMenuOpen(false)} to="/ingredientes" className={navClass}>Ingredientes</NavLink><NavLink onClick={() => setMobileMenuOpen(false)} to="/categorias" className={navClass}>Categorias</NavLink></>}

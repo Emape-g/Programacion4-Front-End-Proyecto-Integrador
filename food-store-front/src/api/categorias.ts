@@ -30,9 +30,9 @@ export interface CategoriasFiltros {
 }
 
 export async function getCategorias(filtros: CategoriasFiltros = {}): Promise<CategoriasResponse> {
-  const { offset = 0, limit = 20, nombre, orden = 'desc' } = filtros;
+  const { offset = 0, limit = 20 } = filtros;
   const res = await apiClient.get<CategoriasResponse>('/categorias/', {
-    params: { offset, limit, ...(nombre ? { nombre } : {}), orden },
+    params: { offset, limit: Math.min(limit, 100) },
   });
   return res.data;
 }

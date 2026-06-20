@@ -69,9 +69,12 @@ export function PedidoDetallePage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const cancelMutation = useMutation({
     mutationFn: () => cancelarPedido(id),
-    onSuccess: (pedido) => {
+    onSuccess: async (pedido) => {
       queryClient.setQueryData(pedidoKeys.detail(id), pedido);
       queryClient.invalidateQueries({ queryKey: pedidoKeys.all });
+      queryClient.invalidateQueries({ queryKey: ['estadisticas'] });
+      queryClient.invalidateQueries({ queryKey: ['productos'] });
+      queryClient.invalidateQueries({ queryKey: ['ingredientes'] });
       setConfirmOpen(false);
     },
   });
