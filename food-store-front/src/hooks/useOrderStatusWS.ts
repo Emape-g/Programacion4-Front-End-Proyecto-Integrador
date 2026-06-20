@@ -6,18 +6,32 @@ import { pedidoKeys } from './usePedidos';
 import type { OrderEvent, Pedido } from '../types/store';
 
 const MAX_RECONNECT_ATTEMPTS = 5;
+const API_PREFIX = /\/api\/v\d+\/?$/;
 
 function wsBaseUrl() {
   const configured = import.meta.env.VITE_API_URL as string | undefined;
   if (!configured || configured.startsWith('/')) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.host}${configured ?? '/api/v1'}`;
+    return `${protocol}//${window.location.host}`;
   }
-  return configured.replace(/^http/, 'ws').replace(/\/+$/, '');
+  return configured.replace(/^http/, 'ws').replace(API_PREFIX, '').replace(/\/+$/, '');
 }
 
-export function useAdminOrdersFeed(enabled: boolean) {
+function applyEvent(queryClient: ReturnType<typeof useQueryClient>, event: OrderEvent) {
+  useWsStore.getState().setLastEvent(event);
+  queryClient.invalidateQueries({ queryKey: pedidoKeys.all });
+  if (event.event === 'pago_confirmado') {
+    queryClient.invalidateQueries({ queryKey: pedidoKeys.detail(event.pedido_id) });
+    return;
+  }
+  queryClient.setQueryData<Pedido>(pedidoKeys.detail(event.pedido_id), (previous) =>
+    previous ? { ...previous, estado_codigo: event.estado_nuevo } : previous,
+  );
+}
+
+function useWsConnection(path: string, enabled: boolean) {
   const token = useAuthStore((state) => state.accessToken);
+  const clearSession = useAuthStore((state) => state.clearSession);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -30,23 +44,31 @@ export function useAdminOrdersFeed(enabled: boolean) {
 
     function connect() {
       store.setStatus(attempt ? 'reconnecting' : 'connecting');
-      socket = new WebSocket(`${wsBaseUrl()}/pedidos/ws/pedidos?token=${encodeURIComponent(token as string)}`);
+      socket = new WebSocket(`${wsBaseUrl()}${path}?token=${encodeURIComponent(token as string)}`);
       socket.onopen = () => {
         attempt = 0;
         store.setReconnectAttempt(0);
         store.setStatus('connected');
       };
       socket.onmessage = (message) => {
-        const event = JSON.parse(message.data) as OrderEvent;
-        store.setLastEvent(event);
-        queryClient.invalidateQueries({ queryKey: pedidoKeys.all });
-        queryClient.setQueryData<Pedido>(pedidoKeys.detail(event.pedido_id), (previous) =>
-          previous ? { ...previous, estado_codigo: event.estado_nuevo } : previous,
-        );
+        try {
+          applyEvent(queryClient, JSON.parse(message.data) as OrderEvent);
+        } catch {
+          // ignore non-JSON frames
+        }
       };
       socket.onerror = () => store.setStatus('error');
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         if (disposed) return;
+        if (event.code === 4001) {
+          store.setStatus('error');
+          clearSession();
+          return;
+        }
+        if (event.code === 4003) {
+          store.setStatus('error');
+          return;
+        }
         attempt += 1;
         store.setReconnectAttempt(attempt);
         if (attempt > MAX_RECONNECT_ATTEMPTS) {
@@ -65,15 +87,21 @@ export function useAdminOrdersFeed(enabled: boolean) {
       socket?.close();
       store.reset();
     };
-  }, [enabled, token, queryClient]);
+  }, [enabled, token, path, queryClient, clearSession]);
+}
+
+export function useAdminOrdersFeed(enabled: boolean) {
+  useWsConnection('/ws/admin/pedidos', enabled);
 }
 
 export function useOrderStatusWS(pedidoId?: number) {
+  const enabled = Number.isFinite(pedidoId);
+  useWsConnection(`/ws/pedidos/${pedidoId ?? 0}`, enabled);
   const status = useWsStore((state) => state.status);
   const lastEvent = useWsStore((state) => state.lastEvent);
   return {
     status,
     lastEvent: lastEvent?.pedido_id === pedidoId ? lastEvent : null,
-    usesPollingFallback: true,
+    usesPollingFallback: status !== 'connected',
   };
 }

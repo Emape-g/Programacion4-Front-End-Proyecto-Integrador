@@ -64,8 +64,8 @@ export function PedidosPage() {
 export function PedidoDetallePage() {
   const id = Number(useParams().id);
   const queryClient = useQueryClient();
-  const pedidoQuery = usePedido(id, 5_000);
   const { status, usesPollingFallback } = useOrderStatusWS(id);
+  const pedidoQuery = usePedido(id, usesPollingFallback ? 5_000 : false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const cancelMutation = useMutation({
     mutationFn: () => cancelarPedido(id),

@@ -47,7 +47,7 @@ export function AdminPedidosPage() {
   const [estadoFilter, setEstadoFilter] = useState('');
   const [target, setTarget] = useState<{ pedido: Pedido; estado: EstadoPedido } | null>(null);
   const [motivo, setMotivo] = useState('');
-  const pedidosQuery = usePedidos(1, 100, estadoFilter || undefined, { refetchInterval: 5_000 });
+  const pedidosQuery = usePedidos(1, 100, estadoFilter || undefined, { refetchInterval: wsStatus === 'connected' ? false : 5_000 });
   const pedidos = [...(pedidosQuery.data?.items ?? [])].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   const mutation = useMutation({
     mutationFn: () => cambiarEstadoPedido(target?.pedido.id ?? 0, target?.estado ?? 'PENDIENTE', motivo),
