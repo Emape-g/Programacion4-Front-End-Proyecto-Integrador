@@ -17,7 +17,15 @@ function wsBaseUrl() {
   return configured.replace(/^http/, 'ws').replace(API_PREFIX, '').replace(/\/+$/, '');
 }
 
-function applyEvent(queryClient: ReturnType<typeof useQueryClient>, event: OrderEvent) {
+function applyEvent(queryClient: ReturnType<typeof useQueryClient>, event: OrderEvent, onStockUpdate?: () => void) {
+  if (event.event === 'stock_actualizado') {
+    queryClient.invalidateQueries({ queryKey: ['productos'] });
+    queryClient.invalidateQueries({ queryKey: ['ingredientes'] });
+    queryClient.invalidateQueries({ queryKey: ['estadisticas'] });
+    onStockUpdate?.();
+    return;
+  }
+
   useWsStore.getState().setLastEvent(event);
   queryClient.invalidateQueries({ queryKey: pedidoKeys.all });
   if (event.event === 'pago_confirmado') {
@@ -90,6 +98,47 @@ function useWsConnection(path: string, enabled: boolean) {
   }, [enabled, token, path, queryClient, clearSession]);
 }
 
+function usePublicWsConnection(path: string, enabled: boolean, onStockUpdate?: () => void) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!enabled) return;
+    let socket: WebSocket | null = null;
+    let retryTimer = 0;
+    let disposed = false;
+    let attempt = 0;
+
+    function connect() {
+      socket = new WebSocket(`${wsBaseUrl()}${path}`);
+      socket.onmessage = (message) => {
+        try {
+          applyEvent(queryClient, JSON.parse(message.data) as OrderEvent, onStockUpdate);
+        } catch {
+          // ignore non-JSON frames
+        }
+      };
+      socket.onclose = () => {
+        if (disposed) return;
+        attempt += 1;
+        if (attempt > MAX_RECONNECT_ATTEMPTS) return;
+        const delay = Math.min(30_000, 1_000 * 2 ** Math.min(attempt, 5));
+        retryTimer = window.setTimeout(connect, delay);
+      };
+    }
+
+    connect();
+    return () => {
+      disposed = true;
+      window.clearTimeout(retryTimer);
+      socket?.close();
+    };
+  }, [enabled, path, queryClient, onStockUpdate]);
+}
+
+export function useProductsStockFeed(enabled = true, onStockUpdate?: () => void) {
+  usePublicWsConnection('/ws/productos', enabled, onStockUpdate);
+}
+
 export function useAdminOrdersFeed(enabled: boolean) {
   useWsConnection('/ws/admin/pedidos', enabled);
 }
@@ -102,6 +151,5 @@ export function useOrderStatusWS(pedidoId?: number) {
   return {
     status,
     lastEvent: lastEvent?.pedido_id === pedidoId ? lastEvent : null,
-    usesPollingFallback: status !== 'connected',
   };
 }

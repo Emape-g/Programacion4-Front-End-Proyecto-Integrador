@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { CheckCircle2, CreditCard, ExternalLink, Minus, Plus, RefreshCw, ShoppingBag, Trash2 } from 'lucide-react';
-import { cancelarPedido, confirmarPagoMercadoPago, createPedido, crearPagoMercadoPago, getFormasPago, getMisDirecciones } from '../../api/cliente';
+import { cancelarPedido, confirmarPagoMercadoPago, createPedido, crearPagoMercadoPago, getFormasPago, getMisDirecciones, getPedido } from '../../api/cliente';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { useAuth } from '../../hooks/useAuth';
 import { useCart } from '../../hooks/useCart';
@@ -47,6 +47,10 @@ function pendingPaymentKey(userId?: number) {
   return userId ? `foodstore_mp_pending_${userId}` : null;
 }
 
+function abrirMercadoPago(initPoint: string) {
+  window.location.assign(initPoint);
+}
+
 export function CarritoPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -65,7 +69,9 @@ export function CarritoPage() {
   const [preferenciaPago, setPreferenciaPago] = useState<PagoCrearResponse | null>(null);
   const [comprobandoPago, setComprobandoPago] = useState(false);
   const [cancelandoPendiente, setCancelandoPendiente] = useState(false);
+  const [redirigiendoPago, setRedirigiendoPago] = useState(false);
   const [estadoPago, setEstadoPago] = useState('');
+  const [pendingVersion, setPendingVersion] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -75,7 +81,7 @@ export function CarritoPage() {
         setDirecciones(addresses);
         setFormasPago(payments.filter((payment) => payment.habilitado));
         setDireccionId(addresses.find((address) => address.es_principal)?.id ?? addresses[0]?.id ?? '');
-        setFormaPago(payments.find((payment) => payment.habilitado)?.codigo ?? '');
+        setFormaPago('');
       })
       .catch(() => setError('No se pudieron cargar los datos del checkout.'))
       .finally(() => active && setLoading(false));
@@ -85,6 +91,7 @@ export function CarritoPage() {
   }, [user]);
 
   const pagoPendienteGuardado = useMemo(() => {
+    void pendingVersion;
     const key = pendingPaymentKey(user?.id);
     if (!key) return null;
     const raw = localStorage.getItem(key);
@@ -96,26 +103,53 @@ export function CarritoPage() {
       localStorage.removeItem(key);
       return null;
     }
-  }, [user?.id]);
+  }, [user?.id, pendingVersion]);
 
   const pedidoMercadoPago = pedidoCreado ?? pagoPendienteGuardado?.pedido ?? null;
   const preferenciaMercadoPago = preferenciaPago ?? pagoPendienteGuardado?.preferencia ?? null;
   const estadoPagoActual = estadoPago || pagoPendienteGuardado?.estadoPago || '';
 
-  function guardarPagoPendiente(pedido: Pedido, preferencia: PagoCrearResponse | null, estado = '') {
+  const guardarPagoPendiente = useCallback((pedido: Pedido, preferencia: PagoCrearResponse | null, estado = '') => {
     const key = pendingPaymentKey(user?.id);
     if (!key) return;
     const pending: PendingMercadoPagoOrder = { pedido, preferencia, estadoPago: estado };
     localStorage.setItem(key, JSON.stringify(pending));
-  }
+    setPendingVersion((version) => version + 1);
+  }, [user?.id]);
 
-  function limpiarPagoPendiente() {
+  const limpiarPagoPendiente = useCallback(() => {
     const key = pendingPaymentKey(user?.id);
     if (key) localStorage.removeItem(key);
     setPedidoCreado(null);
     setPreferenciaPago(null);
     setEstadoPago('');
-  }
+    setPendingVersion((version) => version + 1);
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!pagoPendienteGuardado?.pedido.id) return;
+    let active = true;
+
+    getPedido(pagoPendienteGuardado.pedido.id)
+      .then((pedidoActual) => {
+        if (!active) return;
+        if (['CANCELADO', 'ENTREGADO'].includes(pedidoActual.estado_codigo)) {
+          limpiarPagoPendiente();
+          setError('');
+          return;
+        }
+        if (pedidoActual.estado_codigo !== pagoPendienteGuardado.pedido.estado_codigo) {
+          guardarPagoPendiente(pedidoActual, pagoPendienteGuardado.preferencia, pagoPendienteGuardado.estadoPago);
+        }
+      })
+      .catch(() => {
+        if (active) limpiarPagoPendiente();
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [guardarPagoPendiente, limpiarPagoPendiente, pagoPendienteGuardado]);
 
   function stockCalculado(item: { producto: Producto; personalizacion: number[] }) {
     return Math.max(0, Number(item.producto.stock_cantidad ?? 0));
@@ -167,6 +201,7 @@ export function CarritoPage() {
       queryClient.invalidateQueries({ queryKey: ['ingredientes'] });
       setPedidoCreado(pedido);
       if (formaPago === 'MERCADOPAGO') {
+        setRedirigiendoPago(true);
         guardarPagoPendiente(pedido, null);
         const preference = await crearPagoMercadoPago(pedido.id);
         if (!preference.init_point) {
@@ -175,6 +210,7 @@ export function CarritoPage() {
         setPreferenciaPago(preference);
         guardarPagoPendiente(pedido, preference);
         clearCart();
+        abrirMercadoPago(preference.init_point);
         return;
       }
       clearCart();
@@ -183,6 +219,7 @@ export function CarritoPage() {
       const detail = (requestError as { response?: { data?: { detail?: string } } }).response?.data?.detail;
       const message = requestError instanceof Error ? requestError.message : null;
       setError(detail ?? message ?? 'No se pudo crear el pedido.');
+      setRedirigiendoPago(false);
     } finally {
       setSubmitting(false);
     }
@@ -212,6 +249,7 @@ export function CarritoPage() {
 
   async function reintentarPago() {
     if (!pedidoMercadoPago) return;
+    setRedirigiendoPago(true);
     setSubmitting(true);
     setError('');
     try {
@@ -222,10 +260,12 @@ export function CarritoPage() {
       setPreferenciaPago(preference);
       guardarPagoPendiente(pedidoMercadoPago, preference, estadoPagoActual);
       clearCart();
+      abrirMercadoPago(preference.init_point);
     } catch (requestError) {
       const detail = (requestError as { response?: { data?: { detail?: string } } }).response?.data?.detail;
       const message = requestError instanceof Error ? requestError.message : null;
       setError(detail ?? message ?? 'No se pudo crear la preferencia de Mercado Pago.');
+      setRedirigiendoPago(false);
     } finally {
       setSubmitting(false);
     }
@@ -247,6 +287,18 @@ export function CarritoPage() {
     } finally {
       setCancelandoPendiente(false);
     }
+  }
+
+  if (redirigiendoPago) {
+    return (
+      <div className="mx-auto flex min-h-[420px] max-w-xl flex-col items-center justify-center rounded-lg border border-gray-200 bg-white p-8 text-center shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <RefreshCw className="animate-spin text-[#2a7a8a]" size={42} />
+        <h1 className="mt-5 text-2xl font-bold text-gray-900 dark:text-white">Abriendo Mercado Pago</h1>
+        <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
+          Estamos preparando el pago seguro. En unos segundos vas a Mercado Pago.
+        </p>
+      </div>
+    );
   }
 
   if (pedidoMercadoPago && (formaPago === 'MERCADOPAGO' || preferenciaMercadoPago || pagoPendienteGuardado)) {
@@ -422,6 +474,7 @@ export function CarritoPage() {
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Forma de pago</label>
               <select value={formaPago} onChange={(event) => setFormaPago(event.target.value)} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-white">
+                <option value="">Seleccionar forma de pago</option>
                 {formasPago.map((payment) => <option key={payment.codigo} value={payment.codigo}>{formaPagoLabel(payment)}</option>)}
               </select>
             </div>

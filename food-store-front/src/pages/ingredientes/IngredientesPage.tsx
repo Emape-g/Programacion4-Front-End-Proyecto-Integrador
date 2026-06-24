@@ -14,11 +14,6 @@ import {
 import type { Ingrediente } from '../../api/ingredientes';
 import { useDebounce } from '../../hooks/useDebounce';
 import apiClient from '../../api/axiosClient';
-import {
-  getIngredientUnitPreference,
-  removeIngredientUnitPreference,
-  saveIngredientUnitPreference,
-} from '../../utils/ingredientUnits';
 
 type Tab = 'todos' | 'alergenos' | 'sin-alergeno';
 
@@ -44,6 +39,12 @@ const TABS: [Tab, string][] = [
   ['alergenos', 'Alérgenos'],
   ['sin-alergeno', 'Sin alérgeno'],
 ];
+
+function cantidadTexto(value: number | string) {
+  const numberValue = Number(value);
+  if (Number.isNaN(numberValue)) return String(value);
+  return numberValue.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+}
 
 export function IngredientesPage() {
   const [tab, setTab] = useState<Tab>('todos');
@@ -144,17 +145,13 @@ export function IngredientesPage() {
   }
 
   function openEdit(item: Ingrediente) {
-    const preference = getIngredientUnitPreference(item.id);
     setEditing(item);
     setForm({
       nombre: item.nombre,
       descripcion: item.descripcion ?? '',
       stock_cantidad: String(item.stock_cantidad ?? 0),
-      unidad_medida_id: preference ? String(preference.unidad_medida_id) : '',
-      precio_unitario:
-        preference?.precio_unitario !== undefined
-          ? String(preference.precio_unitario)
-          : '',
+      unidad_medida_id: String(item.unidad_medida_id),
+      precio_unitario: String(item.precio_unitario),
       es_alergeno: item.es_alergeno,
     });
     setFormError('');
@@ -174,8 +171,8 @@ export function IngredientesPage() {
     if (!unidad) { setFormError('La unidad seleccionada no es válida'); return; }
 
     const precioUnitario = Number(form.precio_unitario);
-    if (!form.precio_unitario || Number.isNaN(precioUnitario) || precioUnitario < 0) {
-      setFormError('El precio por unidad debe ser un numero valido');
+    if (!form.precio_unitario || Number.isNaN(precioUnitario) || precioUnitario <= 0) {
+      setFormError('El precio por unidad debe ser mayor a 0');
       return;
     }
 
@@ -185,21 +182,17 @@ export function IngredientesPage() {
       nombre,
       descripcion: form.descripcion.trim() || undefined,
       stock_cantidad: stock,
+      unidad_medida_id: unidad.id,
+      precio_unitario: precioUnitario,
       es_alergeno: form.es_alergeno,
     };
 
     try {
-      let saved: Ingrediente;
       if (editing) {
-        saved = await updateIngrediente(editing.id, payload);
+        await updateIngrediente(editing.id, payload);
       } else {
-        saved = await createIngrediente(payload);
+        await createIngrediente(payload);
       }
-      saveIngredientUnitPreference(saved.id, {
-        unidad_medida_id: unidad.id,
-        unidad_simbolo: unidad.simbolo,
-        precio_unitario: precioUnitario,
-      });
       setModalOpen(false);
       refresh();
     } catch (err: unknown) {
@@ -220,7 +213,6 @@ export function IngredientesPage() {
     setDeleting(true);
     try {
       await deleteIngrediente(deleteTarget.id);
-      removeIngredientUnitPreference(deleteTarget.id);
       setDeleteTarget(null);
       refresh();
     } finally {
@@ -338,14 +330,12 @@ export function IngredientesPage() {
                     <td className="px-4 py-3.5 text-gray-400 dark:text-gray-500 text-xs">{offset + idx + 1}</td>
                     <td className="px-4 py-3.5 font-medium text-gray-900 dark:text-white">{item.nombre}</td>
                     <td className="px-4 py-3.5 text-gray-500 dark:text-gray-400 max-w-xs truncate">{item.descripcion || '-'}</td>
-                    <td className="px-4 py-3.5 font-medium text-gray-700 dark:text-gray-300">{item.stock_cantidad}</td>
+                    <td className="px-4 py-3.5 font-medium text-gray-700 dark:text-gray-300">{cantidadTexto(item.stock_cantidad)}</td>
                     <td className="px-4 py-3.5 text-gray-500 dark:text-gray-400">
-                      {getIngredientUnitPreference(item.id)?.unidad_simbolo ?? '-'}
+                      {item.unidad_simbolo}
                     </td>
                     <td className="px-4 py-3.5 font-medium text-gray-700 dark:text-gray-300">
-                      {getIngredientUnitPreference(item.id)?.precio_unitario !== undefined
-                        ? `$${getIngredientUnitPreference(item.id)?.precio_unitario?.toFixed(2)}`
-                        : '-'}
+                      ${Number(item.precio_unitario).toFixed(2)}
                     </td>
                     <td className="px-4 py-3.5">
                       <Badge variant={item.es_alergeno ? 'orange' : 'green'}>

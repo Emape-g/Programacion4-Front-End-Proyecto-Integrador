@@ -4,7 +4,11 @@ export interface Ingrediente {
   id: number;
   nombre: string;
   descripcion?: string;
-  stock_cantidad: number;
+  stock_cantidad: number | string;
+  unidad_medida_id: number;
+  unidad_nombre: string;
+  unidad_simbolo: string;
+  precio_unitario: number | string;
   es_alergeno: boolean;
   deleted_at?: string | null;
   created_at: string;
@@ -20,6 +24,8 @@ export interface IngredientePayload {
   nombre: string;
   descripcion?: string;
   stock_cantidad: number;
+  unidad_medida_id: number;
+  precio_unitario: number;
   es_alergeno: boolean;
 }
 

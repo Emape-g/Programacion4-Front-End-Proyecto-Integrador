@@ -11,6 +11,7 @@ import Productos from './pages/Productos';
 import ProductNuevo from './pages/ProductNuevo';
 import { CatalogoClientePage } from './pages/cliente/CatalogoClientePage';
 import { CarritoPage } from './pages/cliente/CarritoPage';
+import { CheckoutReturnPage } from './pages/cliente/CheckoutReturnPage';
 import { PerfilPage } from './pages/cliente/PerfilPage';
 import { PedidoDetallePage, PedidosPage } from './pages/cliente/PedidosPage';
 import { AdminPedidosPage } from './pages/admin/AdminPedidosPage';
@@ -31,6 +32,7 @@ function App() {
             <Route element={<Layout />}>
               <Route path="/hacer-pedido" element={<CatalogoClientePage />} />
               <Route path="/carrito" element={<CarritoPage />} />
+              <Route path="/checkout/:estado" element={<CheckoutReturnPage />} />
             </Route>
 
             <Route element={<ProtectedRoute roles={['CLIENT']} />}>

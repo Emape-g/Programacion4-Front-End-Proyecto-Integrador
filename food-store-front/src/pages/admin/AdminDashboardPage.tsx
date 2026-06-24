@@ -20,7 +20,7 @@ function ChartCard({ title, children }: { title: string; children: ReactNode }) 
 
 const axisTick = { fontSize: 11, fill: 'var(--chart-text)' };
 const tooltipStyle = { backgroundColor: 'var(--chart-tooltip-bg)', borderColor: 'var(--chart-border)', borderRadius: 8, color: 'var(--chart-tooltip-text)' };
-const autoRefresh = { refetchInterval: 5_000, refetchOnWindowFocus: true };
+const autoRefresh = { refetchOnWindowFocus: true };
 
 export function AdminDashboardPage() {
   const range = useMemo(() => {

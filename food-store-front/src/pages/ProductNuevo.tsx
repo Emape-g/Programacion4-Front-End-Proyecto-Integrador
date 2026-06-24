@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import apiClient from "../api/axiosClient";
 import { uploadImagen } from "../api/cliente";
-import { getIngredientUnitPreference } from "../utils/ingredientUnits";
 
 interface UnidadMedida {
   id: number;
@@ -21,16 +20,16 @@ interface Ingrediente {
   nombre: string;
   descripcion?: string;
   stock_cantidad: number | string;
-  precio_unitario?: number | string | null;
-  unidad_medida_id?: number | null;
-  unidad_simbolo?: string | null;
+  precio_unitario: number | string;
+  unidad_medida_id: number;
+  unidad_simbolo: string;
 }
 
 interface IngredienteProductoTemp {
   ingrediente_id: number;
   nombre: string;
   unidad: string;
-  unidad_medida_id?: number;
+  unidad_medida_id: number;
   cantidad: number;
   precio_unitario: number;
   stock_disponible: number;
@@ -55,7 +54,7 @@ interface ProductoDetalle {
     ingrediente_id: number;
     nombre_ingrediente: string;
     cantidad: number;
-    unidad_medida_id?: number;
+    unidad_medida_id: number;
     unidad_simbolo?: string;
     es_removible: boolean;
   }[];
@@ -114,7 +113,6 @@ export default function ProductNuevo() {
 
   const [cantidadIngrediente, setCantidadIngrediente] = useState("");
   const [unidadIngredienteId, setUnidadIngredienteId] = useState("");
-  const [costoUnitarioIngrediente, setCostoUnitarioIngrediente] = useState("");
   const [esRemovible, setEsRemovible] = useState(false);
 
   const [ingredientesProducto, setIngredientesProducto] = useState<
@@ -190,14 +188,13 @@ export default function ProductNuevo() {
             categoriasOriginales[0];
 
           const ingredientesIniciales = ingredientesOriginales.map((ing) => {
-            const preference = getIngredientUnitPreference(ing.ingrediente_id);
             const ingredienteBase = listaIngredientes.find((ingrediente) => ingrediente.id === ing.ingrediente_id);
-            const precioUnitario = ingredienteBase?.precio_unitario ?? preference?.precio_unitario ?? 0;
+            const precioUnitario = ingredienteBase?.precio_unitario ?? 0;
             return {
               ingrediente_id: ing.ingrediente_id,
               nombre: ing.nombre_ingrediente,
-              unidad: ing.unidad_simbolo ?? preference?.unidad_simbolo ?? "-",
-              unidad_medida_id: ing.unidad_medida_id ?? preference?.unidad_medida_id,
+              unidad: ingredienteBase?.unidad_simbolo ?? ing.unidad_simbolo ?? "-",
+              unidad_medida_id: ingredienteBase?.unidad_medida_id ?? ing.unidad_medida_id,
               cantidad: Number(ing.cantidad),
               precio_unitario: Number(precioUnitario) || 0,
               stock_disponible: Number(ingredienteBase?.stock_cantidad ?? 0),
@@ -305,7 +302,6 @@ export default function ProductNuevo() {
     setIngredienteSeleccionado(null);
     setCantidadIngrediente("");
     setUnidadIngredienteId("");
-    setCostoUnitarioIngrediente("");
     setEsRemovible(false);
     setMostrarDropdownIngredientes(false);
   }
@@ -319,17 +315,15 @@ export default function ProductNuevo() {
     }
 
     const cantidad = Number(cantidadIngrediente);
-    const precio = costoUnitarioIngrediente
-      ? Number(costoUnitarioIngrediente)
-      : 0;
+    const precio = Number(ingredienteSeleccionado.precio_unitario);
 
     if (!cantidad || cantidad <= 0) {
       setError("La cantidad del ingrediente debe ser mayor a 0.");
       return;
     }
 
-    if (Number.isNaN(precio) || precio < 0) {
-      setError("El costo por unidad debe ser un numero valido.");
+    if (Number.isNaN(precio) || precio <= 0) {
+      setError("El ingrediente debe tener un precio por unidad mayor a 0.");
       return;
     }
 
@@ -368,19 +362,6 @@ export default function ProductNuevo() {
   function eliminarIngrediente(id: number) {
     setIngredientesProducto((prev) =>
       prev.filter((item) => item.ingrediente_id !== id)
-    );
-  }
-
-  function actualizarCostoIngrediente(id: number, costo: string) {
-    const precio = costo ? Number(costo) : 0;
-    if (Number.isNaN(precio) || precio < 0) return;
-
-    setIngredientesProducto((prev) =>
-      prev.map((item) =>
-        item.ingrediente_id === id
-          ? { ...item, precio_unitario: precio }
-          : item
-      )
     );
   }
 
@@ -820,23 +801,9 @@ export default function ProductNuevo() {
                               key={ingrediente.id}
                               type="button"
                               onClick={() => {
-                                const preferredUnit = getIngredientUnitPreference(ingrediente.id);
                                 setIngredienteSeleccionado(ingrediente);
                                 setBusquedaIngrediente(ingrediente.nombre);
-                                setUnidadIngredienteId(
-                                  ingrediente.unidad_medida_id
-                                    ? String(ingrediente.unidad_medida_id)
-                                    : preferredUnit
-                                      ? String(preferredUnit.unidad_medida_id)
-                                      : ""
-                                );
-                                setCostoUnitarioIngrediente(
-                                  ingrediente.precio_unitario !== undefined && ingrediente.precio_unitario !== null
-                                    ? String(ingrediente.precio_unitario)
-                                    : preferredUnit?.precio_unitario !== undefined
-                                      ? String(preferredUnit.precio_unitario)
-                                    : ""
-                                );
+                                setUnidadIngredienteId(String(ingrediente.unidad_medida_id));
                                 setMostrarDropdownIngredientes(false);
                               }}
                               className="w-full text-left px-4 py-2.5 text-sm hover:bg-[#2a7a8a]/10 dark:hover:bg-[#2a7a8a]/20 transition"
@@ -866,15 +833,11 @@ export default function ProductNuevo() {
                     : "Sin unidad"}
                 </div>
 
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={costoUnitarioIngrediente}
-                  onChange={(e) => setCostoUnitarioIngrediente(e.target.value)}
-                  placeholder="Costo/u"
-                  className="px-4 py-2.5 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#2a7a8a]/30 focus:border-[#2a7a8a] transition-colors"
-                />
+                <div className="flex items-center rounded-lg border border-gray-300 bg-gray-50 px-4 py-2.5 text-sm text-gray-700 dark:border-gray-600 dark:bg-gray-700/60 dark:text-gray-200">
+                  {ingredienteSeleccionado
+                    ? `$${Number(ingredienteSeleccionado.precio_unitario).toFixed(2)} / ${ingredienteSeleccionado.unidad_simbolo}`
+                    : "Sin precio"}
+                </div>
 
                 <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
                   <input
@@ -957,20 +920,9 @@ export default function ProductNuevo() {
                           />
                         </td>
                         <td className="px-6 py-4">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={item.precio_unitario || ""}
-                            onChange={(e) =>
-                              actualizarCostoIngrediente(
-                                item.ingrediente_id,
-                                e.target.value
-                              )
-                            }
-                            placeholder="0.00"
-                            className="w-28 px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#2a7a8a]/30 focus:border-[#2a7a8a] transition-colors"
-                          />
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                            ${item.precio_unitario.toFixed(2)}
+                          </span>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                           {item.es_removible ? "Sí" : "No"}

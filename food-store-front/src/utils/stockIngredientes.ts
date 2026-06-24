@@ -10,7 +10,7 @@ interface StockItem {
 }
 
 export async function getTodosLosIngredientes() {
-  const response = await getIngredientes({ offset: 0, limit: 1000 });
+  const response = await getIngredientes({ offset: 0, limit: 100 });
   return response.data;
 }
 

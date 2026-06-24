@@ -30,6 +30,12 @@ function fecha(value: string) {
   return new Date(value).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  const detail = (error as { response?: { data?: { detail?: string | { msg?: string }[] } } }).response?.data?.detail;
+  if (Array.isArray(detail)) return detail.map((item) => item.msg).filter(Boolean).join(', ') || fallback;
+  return detail || fallback;
+}
+
 export function PedidosPage() {
   const pedidosQuery = usePedidos(1, 100);
   const pedidos = [...(pedidosQuery.data?.items ?? [])].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
@@ -64,8 +70,8 @@ export function PedidosPage() {
 export function PedidoDetallePage() {
   const id = Number(useParams().id);
   const queryClient = useQueryClient();
-  const { status, usesPollingFallback } = useOrderStatusWS(id);
-  const pedidoQuery = usePedido(id, usesPollingFallback ? 5_000 : false);
+  const { status } = useOrderStatusWS(id);
+  const pedidoQuery = usePedido(id);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const cancelMutation = useMutation({
     mutationFn: () => cancelarPedido(id),
@@ -90,7 +96,7 @@ export function PedidoDetallePage() {
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div><Link to="/mis-pedidos" className="text-sm font-medium text-[#2a7a8a] dark:text-cyan-300">Volver</Link><h1 className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">Pedido #{pedido.id}</h1><p className="text-sm text-gray-500 dark:text-gray-400">Creado el {fecha(pedido.created_at)}</p></div>
-        <div className="flex items-center gap-3"><span className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400"><Radio size={13} className={status === 'connected' ? 'text-green-600' : 'text-amber-500'} />{usesPollingFallback ? 'Actualizacion automatica' : status}</span><Badge variant={estadoVariant(pedido.estado_codigo)}>{estadoLabel(pedido.estado_codigo)}</Badge>{puedeCancelar && <button onClick={() => setConfirmOpen(true)} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/30">Cancelar</button>}</div>
+        <div className="flex items-center gap-3"><span className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400"><Radio size={13} className={status === 'connected' ? 'text-green-600' : 'text-amber-500'} />{status === 'connected' ? 'En tiempo real' : 'Reconectando'}</span><Badge variant={estadoVariant(pedido.estado_codigo)}>{estadoLabel(pedido.estado_codigo)}</Badge>{puedeCancelar && <button onClick={() => setConfirmOpen(true)} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 dark:border-red-900/60 dark:text-red-300 dark:hover:bg-red-950/30">Cancelar</button>}</div>
       </div>
 
       <section className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
@@ -109,7 +115,7 @@ export function PedidoDetallePage() {
       {pedido.pago && <section className="rounded-lg border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800"><h2 className="text-lg font-semibold text-gray-900 dark:text-white">Pago</h2><div className="mt-3 grid gap-3 sm:grid-cols-3"><div><p className="text-xs uppercase text-gray-500 dark:text-gray-400">Estado</p><p className="font-medium text-gray-900 dark:text-white">{pedido.pago.mp_status || pedido.pago.estado}</p></div><div><p className="text-xs uppercase text-gray-500 dark:text-gray-400">Metodo</p><p className="font-medium text-gray-900 dark:text-white">Mercado Pago</p></div><div><p className="text-xs uppercase text-gray-500 dark:text-gray-400">Monto</p><p className="font-medium text-gray-900 dark:text-white">{money(pedido.pago.monto)}</p></div></div></section>}
 
       <ConfirmDialog isOpen={confirmOpen} title="Cancelar pedido" message="Se cancelara el pedido. Esta accion no se puede deshacer." confirmLabel="Cancelar pedido" confirmLoadingLabel="Cancelando..." loading={cancelMutation.isPending} onConfirm={() => cancelMutation.mutate()} onCancel={() => setConfirmOpen(false)} />
-      {cancelMutation.isError && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">No se pudo cancelar el pedido.</p>}
+      {cancelMutation.isError && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{getErrorMessage(cancelMutation.error, 'No se pudo cancelar el pedido.')}</p>}
     </div>
   );
 }

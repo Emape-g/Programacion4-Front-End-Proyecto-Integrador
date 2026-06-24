@@ -6,6 +6,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Pagination } from '../../components/ui/Pagination';
 import { useCart } from '../../hooks/useCart';
 import { useDebounce } from '../../hooks/useDebounce';
+import { useProductsStockFeed } from '../../hooks/useOrderStatusWS';
 import { useProductos } from '../../hooks/useProductos';
 import type { Producto } from '../../types/store';
 
@@ -27,6 +28,7 @@ function stockLabel(stock: number, current = 0) {
 }
 
 export function CatalogoClientePage() {
+  useProductsStockFeed(true);
   const { addItem, items } = useCart();
   const [search, setSearch] = useState('');
   const [categoria, setCategoria] = useState<number | ''>('');
@@ -39,8 +41,6 @@ export function CatalogoClientePage() {
     disponible: true,
     offset,
     limit: LIMIT,
-  }, {
-    refetchInterval: 5_000,
   });
   const categoriasQuery = useQuery({
     queryKey: ['categorias', 'catalogo'],

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Pencil, Plus, Trash2, Search, ArrowUpDown } from 'lucide-react';
 import { Badge } from '../components/ui/Badge';
@@ -9,6 +9,7 @@ import apiClient from '../api/axiosClient';
 import { useAuth } from '../hooks/useAuth';
 import { isAdminUser } from '../utils/roles';
 import { getIngredientes } from '../api/ingredientes';
+import { useProductsStockFeed } from '../hooks/useOrderStatusWS';
 
 interface CategoriaProducto {
   categoria_id: number;
@@ -43,7 +44,7 @@ interface Producto {
 
 interface IngredienteStock {
   id: number;
-  stock_cantidad: number;
+  stock_cantidad: number | string;
 }
 
 interface ProductosResponse {
@@ -144,7 +145,7 @@ export default function Productos() {
               return p;
             }
           })),
-          getIngredientes({ offset: 0, limit: 1000 }).then((res) => res.data).catch(() => []),
+          getIngredientes({ offset: 0, limit: 100 }).then((res) => res.data).catch(() => []),
         ]);
 
         const productosConStockCalculado = conDetalle.map((producto) => ({
@@ -173,14 +174,16 @@ export default function Productos() {
     setRefreshKey((k) => k + 1);
   }
 
+  const refreshFromStockEvent = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+  }, []);
+
+  useProductsStockFeed(true, refreshFromStockEvent);
+
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      setRefreshKey((k) => k + 1);
-    }, 5_000);
     const refreshOnFocus = () => setRefreshKey((k) => k + 1);
     window.addEventListener('focus', refreshOnFocus);
     return () => {
-      window.clearInterval(intervalId);
       window.removeEventListener('focus', refreshOnFocus);
     };
   }, []);

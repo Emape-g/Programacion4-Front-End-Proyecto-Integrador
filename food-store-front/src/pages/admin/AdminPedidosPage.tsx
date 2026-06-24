@@ -36,8 +36,14 @@ function cliente(pedido: Pedido) {
 
 function realtimeLabel(status: string) {
   if (status === 'connected') return 'En tiempo real';
-  if (status === 'error' || status === 'disconnected') return 'Actualizacion automatica';
+  if (status === 'error' || status === 'disconnected') return 'Sin conexion en tiempo real';
   return 'Reconectando';
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  const detail = (error as { response?: { data?: { detail?: string | { msg?: string }[] } } }).response?.data?.detail;
+  if (Array.isArray(detail)) return detail.map((item) => item.msg).filter(Boolean).join(', ') || fallback;
+  return detail || fallback;
 }
 
 export function AdminPedidosPage() {
@@ -47,10 +53,14 @@ export function AdminPedidosPage() {
   const [estadoFilter, setEstadoFilter] = useState('');
   const [target, setTarget] = useState<{ pedido: Pedido; estado: EstadoPedido } | null>(null);
   const [motivo, setMotivo] = useState('');
-  const pedidosQuery = usePedidos(1, 100, estadoFilter || undefined, { refetchInterval: wsStatus === 'connected' ? false : 5_000 });
+  const pedidosQuery = usePedidos(1, 100, estadoFilter || undefined);
   const pedidos = [...(pedidosQuery.data?.items ?? [])].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   const mutation = useMutation({
-    mutationFn: () => cambiarEstadoPedido(target?.pedido.id ?? 0, target?.estado ?? 'PENDIENTE', motivo),
+    mutationFn: () => {
+      const estado = target?.estado ?? 'PENDIENTE';
+      const motivoFinal = estado === 'CANCELADO' ? motivo.trim() || 'Cancelado por administracion' : motivo;
+      return cambiarEstadoPedido(target?.pedido.id ?? 0, estado, motivoFinal);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: pedidoKeys.all });
       queryClient.invalidateQueries({ queryKey: ['estadisticas'] });
@@ -84,8 +94,8 @@ export function AdminPedidosPage() {
       <Modal isOpen={Boolean(target)} onClose={() => setTarget(null)} title={`Cambiar a ${target ? label(target.estado) : ''}`} size="sm">
         <p className="text-sm text-gray-600 dark:text-gray-300">Pedido #{target?.pedido.id}. Confirma el cambio de estado.</p>
         {target?.estado === 'CANCELADO' && <textarea value={motivo} onChange={(event) => setMotivo(event.target.value)} rows={3} placeholder="Motivo obligatorio" className="mt-4 w-full rounded-lg border p-3 text-sm dark:border-gray-600 dark:bg-gray-900" />}
-        {mutation.isError && <p className="mt-3 text-sm text-red-600">No se pudo cambiar el estado.</p>}
-        <div className="mt-5 flex justify-end gap-2"><button onClick={() => setTarget(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 dark:border-gray-600 dark:text-gray-200">Volver</button><button disabled={mutation.isPending || (target?.estado === 'CANCELADO' && !motivo.trim())} onClick={() => mutation.mutate()} className="rounded-lg bg-[#2a7a8a] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{mutation.isPending ? 'Guardando...' : 'Confirmar'}</button></div>
+        {mutation.isError && <p className="mt-3 text-sm text-red-600">{getErrorMessage(mutation.error, 'No se pudo cambiar el estado.')}</p>}
+        <div className="mt-5 flex justify-end gap-2"><button onClick={() => setTarget(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 dark:border-gray-600 dark:text-gray-200">Volver</button><button disabled={mutation.isPending} onClick={() => mutation.mutate()} className="rounded-lg bg-[#2a7a8a] px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{mutation.isPending ? 'Guardando...' : 'Confirmar'}</button></div>
       </Modal>
     </div>
   );
