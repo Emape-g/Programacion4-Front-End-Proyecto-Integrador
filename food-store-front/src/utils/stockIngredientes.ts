@@ -108,14 +108,9 @@ export async function validarStockIngredientes(items: StockItem[]) {
 
 export async function validarStockActualCarrito(items: StockItem[]) {
   const itemsConDetalle = await completarProductos(items);
-  const ingredientes = await getTodosLosIngredientes();
 
   for (const item of itemsConDetalle) {
-    const disponible = stockDisponiblePorIngredientes(
-      item.producto,
-      ingredientes,
-      item.personalizacion ?? [],
-    );
+    const disponible = Math.max(0, Number(item.producto.stock_cantidad ?? 0));
     if (item.cantidad > disponible) {
       throw new Error(
         `No hay stock suficiente para ${item.producto.nombre}. Pediste ${item.cantidad}, quedan ${disponible}. Ajusta la cantidad para continuar.`,

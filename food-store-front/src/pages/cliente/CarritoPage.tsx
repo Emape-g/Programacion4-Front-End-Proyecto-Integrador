@@ -9,8 +9,6 @@ import { useCart } from '../../hooks/useCart';
 import { isClientUser } from '../../utils/roles';
 import type { DireccionEntrega, FormaPago, IngredienteProducto, PagoCrearResponse, Pedido, Producto } from '../../types/store';
 import {
-  aplicarStockCalculado,
-  getTodosLosIngredientes,
   validarStockActualCarrito,
 } from '../../utils/stockIngredientes';
 
@@ -104,15 +102,13 @@ export function CarritoPage() {
 
     async function refrescarStockCarrito() {
       try {
-        const ingredientes = await getTodosLosIngredientes();
         const actualizados = await Promise.all(
           items.map(async (item) => {
             const productoActual = await getProducto(item.producto.id).catch(() => item.producto);
-            const productoConStock = aplicarStockCalculado(productoActual, ingredientes);
-            const stock = Math.max(0, Number(productoConStock.stock_cantidad));
+            const stock = Math.max(0, Number(productoActual.stock_cantidad));
             return {
               ...item,
-              producto: productoConStock,
+              producto: productoActual,
               cantidad: Math.min(item.cantidad, stock),
             };
           }),
