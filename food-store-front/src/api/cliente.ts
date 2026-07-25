@@ -1,4 +1,6 @@
 import apiClient from './axiosClient';
+import { getIngredientes } from './ingredientes';
+import type { Ingrediente } from './ingredientes';
 import type {
   CloudinaryUpload,
   DireccionEntrega,
@@ -20,6 +22,21 @@ import type {
   Usuario,
   VentaPeriodo,
 } from '../types/store';
+
+function stockDisponiblePorIngredientes(producto: Producto, ingredientes: Ingrediente[]) {
+  const stockById = new Map(
+    ingredientes.map((ingrediente) => [ingrediente.id, Number(ingrediente.stock_cantidad)]),
+  );
+  const cantidades = (producto.ingredientes ?? []).map((ingrediente) => {
+    const necesario = Number(ingrediente.cantidad);
+    const disponible = stockById.get(ingrediente.ingrediente_id);
+    if (!necesario || necesario <= 0 || disponible === undefined) return Number.POSITIVE_INFINITY;
+    return Math.floor(disponible / necesario);
+  });
+  const calculado = Math.min(...cantidades);
+  if (!Number.isFinite(calculado)) return Math.max(0, Number(producto.stock_cantidad ?? 0));
+  return Math.max(0, calculado);
+}
 
 export async function loginUsuario(email: string, password: string) {
   const response = await apiClient.post<TokenResponse>('/auth/login', { email, password });
@@ -123,9 +140,12 @@ export async function getProductosCliente(params: {
   offset?: number;
   limit?: number;
 } = {}) {
-  const response = await apiClient.get<ListResponse<Producto>>('/productos/', {
-    params: { offset: 0, limit: 24, ...params },
-  });
+  const [response, ingredientesResponse] = await Promise.all([
+    apiClient.get<ListResponse<Producto>>('/productos/', {
+      params: { offset: 0, limit: 24, ...params },
+    }),
+    getIngredientes({ offset: 0, limit: 100 }).catch(() => ({ data: [] as Ingrediente[], total: 0 })),
+  ]);
   const detalles = await Promise.all(
     response.data.data.map(async (producto) => {
       try {
@@ -135,7 +155,11 @@ export async function getProductosCliente(params: {
       }
     }),
   );
-  return { ...response.data, data: detalles };
+  const data = detalles.map((producto) => ({
+    ...producto,
+    stock_cantidad: stockDisponiblePorIngredientes(producto, ingredientesResponse.data),
+  }));
+  return { ...response.data, data };
 }
 
 export async function getProducto(id: number) {

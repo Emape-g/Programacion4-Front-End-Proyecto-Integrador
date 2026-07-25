@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { CheckCircle2, CreditCard, ExternalLink, Minus, Plus, RefreshCw, ShoppingBag, Trash2 } from 'lucide-react';
-import { cancelarPedido, confirmarPagoMercadoPago, createPedido, crearPagoMercadoPago, getFormasPago, getMisDirecciones, getPedido } from '../../api/cliente';
+import { cancelarPedido, confirmarPagoMercadoPago, createPedido, crearPagoMercadoPago, getFormasPago, getMisDirecciones, getPedido, getProducto } from '../../api/cliente';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { useAuth } from '../../hooks/useAuth';
 import { useCart } from '../../hooks/useCart';
 import { isClientUser } from '../../utils/roles';
 import type { DireccionEntrega, FormaPago, IngredienteProducto, PagoCrearResponse, Pedido, Producto } from '../../types/store';
 import {
+  aplicarStockCalculado,
+  getTodosLosIngredientes,
   validarStockActualCarrito,
 } from '../../utils/stockIngredientes';
 
@@ -55,7 +57,7 @@ export function CarritoPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const { items, total, updateQuantity, updatePersonalizacion, removeItem, clearCart } = useCart();
+  const { items, total, updateQuantity, updatePersonalizacion, removeItem, clearCart, setItems } = useCart();
   const [direcciones, setDirecciones] = useState<DireccionEntrega[]>([]);
   const [formasPago, setFormasPago] = useState<FormaPago[]>([]);
   const [direccionId, setDireccionId] = useState<number | ''>('');
@@ -72,6 +74,7 @@ export function CarritoPage() {
   const [redirigiendoPago, setRedirigiendoPago] = useState(false);
   const [estadoPago, setEstadoPago] = useState('');
   const [pendingVersion, setPendingVersion] = useState(0);
+  const refreshedCartSignatureRef = useRef('');
 
   useEffect(() => {
     let active = true;
@@ -89,6 +92,44 @@ export function CarritoPage() {
       active = false;
     };
   }, [user]);
+
+  useEffect(() => {
+    if (!items.length) return;
+    const signature = items
+      .map((item) => `${item.producto.id}:${item.cantidad}:${item.personalizacion.join(',')}`)
+      .join('|');
+    if (refreshedCartSignatureRef.current === signature) return;
+    refreshedCartSignatureRef.current = signature;
+    let active = true;
+
+    async function refrescarStockCarrito() {
+      try {
+        const ingredientes = await getTodosLosIngredientes();
+        const actualizados = await Promise.all(
+          items.map(async (item) => {
+            const productoActual = await getProducto(item.producto.id).catch(() => item.producto);
+            const productoConStock = aplicarStockCalculado(productoActual, ingredientes);
+            const stock = Math.max(0, Number(productoConStock.stock_cantidad));
+            return {
+              ...item,
+              producto: productoConStock,
+              cantidad: Math.min(item.cantidad, stock),
+            };
+          }),
+        );
+        if (active) {
+          setItems(actualizados.filter((item) => item.cantidad > 0));
+        }
+      } catch {
+        // El checkout vuelve a validar stock al confirmar.
+      }
+    }
+
+    refrescarStockCarrito();
+    return () => {
+      active = false;
+    };
+  }, [items, setItems]);
 
   const pagoPendienteGuardado = useMemo(() => {
     void pendingVersion;

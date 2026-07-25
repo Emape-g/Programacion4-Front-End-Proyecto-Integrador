@@ -16,6 +16,7 @@ export interface CartContextType {
   updatePersonalizacion: (productoId: number, ingredientes: number[]) => void;
   removeItem: (productoId: number) => void;
   clearCart: () => void;
+  setItems: (items: CartItem[]) => void;
 }
 
 export const CartContext = createContext<CartContextType | null>(null);
