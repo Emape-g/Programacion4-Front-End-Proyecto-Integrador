@@ -43,7 +43,16 @@ const TABS: [Tab, string][] = [
 function cantidadTexto(value: number | string) {
   const numberValue = Number(value);
   if (Number.isNaN(numberValue)) return String(value);
-  return numberValue.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+  return numberValue.toLocaleString('es-AR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function numeroInputTexto(value: number | string) {
+  const numberValue = Number(value);
+  if (Number.isNaN(numberValue)) return String(value);
+  return numberValue.toFixed(2);
 }
 
 export function IngredientesPage() {
@@ -149,9 +158,9 @@ export function IngredientesPage() {
     setForm({
       nombre: item.nombre,
       descripcion: item.descripcion ?? '',
-      stock_cantidad: String(item.stock_cantidad ?? 0),
+      stock_cantidad: numeroInputTexto(item.stock_cantidad ?? 0),
       unidad_medida_id: String(item.unidad_medida_id),
-      precio_unitario: String(item.precio_unitario),
+      precio_unitario: numeroInputTexto(item.precio_unitario),
       es_alergeno: item.es_alergeno,
     });
     setFormError('');
@@ -427,7 +436,7 @@ export function IngredientesPage() {
               </label>
                 <input
                 type="number"
-                step="0.001"
+                step="0.01"
                 min="0"
                 value={form.stock_cantidad}
                 onChange={(e) => setForm((p) => ({ ...p, stock_cantidad: e.target.value }))}
