@@ -30,8 +30,10 @@ function variant(estado: EstadoPedido) {
 }
 
 function cliente(pedido: Pedido) {
-  const nombre = [pedido.usuario?.nombre, pedido.usuario?.apellido].filter(Boolean).join(' ');
-  return nombre || pedido.usuario_nombre || pedido.cliente_nombre || (pedido.usuario_id ? `Usuario #${pedido.usuario_id}` : 'Cliente no disponible');
+  const nombre = [pedido.usuario_nombre, pedido.usuario_apellido].filter(Boolean).join(' ');
+  if (nombre) return nombre;
+  const anidado = [pedido.usuario?.nombre, pedido.usuario?.apellido].filter(Boolean).join(' ');
+  return anidado || pedido.cliente_nombre || (pedido.usuario_id ? `Usuario #${pedido.usuario_id}` : 'Cliente no disponible');
 }
 
 function realtimeLabel(status: string) {

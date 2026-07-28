@@ -25,18 +25,23 @@ export const useCartStore = create<CartStore>()(
       addItem: (producto, cantidad = 1) =>
         set((state) => {
           const stock = Math.max(0, Number(producto.stock_cantidad));
+          if (stock <= 0) return state;
           const current = state.items.find((item) => item.producto.id === producto.id);
           if (current) {
+            const nuevaCantidad = Math.min(stock, current.cantidad + cantidad);
+            if (nuevaCantidad <= 0) return state;
             return {
-              items: state.items.map((item) =>
-                item.producto.id === producto.id
-                  ? { ...item, producto, cantidad: Math.min(stock, item.cantidad + cantidad) }
-                  : item,
+              items: state.items.map((it) =>
+                it.producto.id === producto.id
+                  ? { ...it, producto, cantidad: nuevaCantidad }
+                  : it,
               ),
             };
           }
+          const cantidadInicial = Math.min(stock, cantidad);
+          if (cantidadInicial <= 0) return state;
           return {
-            items: [...state.items, { producto, cantidad: Math.min(stock, cantidad), personalizacion: [] }],
+            items: [...state.items, { producto, cantidad: cantidadInicial, personalizacion: [] }],
           };
         }),
       updateQuantity: (productoId, cantidad) =>

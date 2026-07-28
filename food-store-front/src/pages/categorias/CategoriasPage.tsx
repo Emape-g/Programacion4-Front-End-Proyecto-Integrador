@@ -176,7 +176,7 @@ export function CategoriasPage() {
     setFormError('');
     try {
       const image = await uploadImagen(file, 'categorias');
-      setForm((current) => ({ ...current, imagen_url: image.secure_url }));
+      setForm((current) => ({ ...current, imagen_url: image.url }));
     } catch {
       setFormError('No se pudo subir la imagen.');
     } finally {

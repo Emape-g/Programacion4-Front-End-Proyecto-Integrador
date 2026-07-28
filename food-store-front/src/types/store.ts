@@ -149,6 +149,7 @@ export interface Pedido {
   id: number;
   usuario_id?: number;
   usuario_nombre?: string;
+  usuario_apellido?: string;
   cliente_nombre?: string;
   usuario?: Pick<Usuario, 'id' | 'nombre' | 'apellido' | 'email'>;
   direccion_entrega_id?: number | null;
@@ -216,11 +217,7 @@ export interface IngresoFormaPago {
   cantidad: number;
 }
 
-export interface CloudinaryUpload {
-  secure_url: string;
-  public_id: string;
-  width: number;
-  height: number;
-  format: string;
-  resource_type: string;
+export interface ImagenUploadResponse {
+  url: string;
+  filename: string;
 }

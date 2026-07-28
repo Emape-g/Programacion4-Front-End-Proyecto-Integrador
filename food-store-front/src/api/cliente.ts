@@ -1,9 +1,9 @@
 import apiClient from './axiosClient';
 import type {
-  CloudinaryUpload,
   DireccionEntrega,
   DireccionPayload,
   FormaPago,
+  ImagenUploadResponse,
   IngresoFormaPago,
   ListResponse,
   Pago,
@@ -214,15 +214,15 @@ export async function getPagoPedido(pedidoId: number) {
 export async function uploadImagen(file: File, folder = 'productos') {
   const body = new FormData();
   body.append('file', file);
-  const response = await apiClient.post<CloudinaryUpload>('/uploads/imagen', body, {
+  const response = await apiClient.post<ImagenUploadResponse>('/uploads/imagen', body, {
     params: { folder },
     headers: { 'Content-Type': 'multipart/form-data' },
   });
   return response.data;
 }
 
-export async function deleteImagen(publicId: string) {
-  await apiClient.delete(`/uploads/imagen/${encodeURIComponent(publicId)}`);
+export async function deleteImagen(folder: string, filename: string) {
+  await apiClient.delete(`/uploads/imagen/${encodeURIComponent(folder)}/${encodeURIComponent(filename)}`);
 }
 
 export async function getResumenEstadisticas() {

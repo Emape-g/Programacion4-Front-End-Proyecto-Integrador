@@ -48,7 +48,7 @@ function pendingPaymentKey(userId?: number) {
 }
 
 function abrirMercadoPago(initPoint: string) {
-  window.location.assign(initPoint);
+  window.open(initPoint, '_blank', 'noopener,noreferrer');
 }
 
 export function CarritoPage() {
@@ -248,6 +248,7 @@ export function CarritoPage() {
         guardarPagoPendiente(pedido, preference);
         clearCart();
         abrirMercadoPago(preference.init_point);
+        setRedirigiendoPago(false);
         return;
       }
       clearCart();
@@ -298,6 +299,7 @@ export function CarritoPage() {
       guardarPagoPendiente(pedidoMercadoPago, preference, estadoPagoActual);
       clearCart();
       abrirMercadoPago(preference.init_point);
+      setRedirigiendoPago(false);
     } catch (requestError) {
       const detail = (requestError as { response?: { data?: { detail?: string } } }).response?.data?.detail;
       const message = requestError instanceof Error ? requestError.message : null;

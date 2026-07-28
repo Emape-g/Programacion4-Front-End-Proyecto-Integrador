@@ -8,7 +8,6 @@ import { useDebounce } from '../hooks/useDebounce';
 import apiClient from '../api/axiosClient';
 import { useAuth } from '../hooks/useAuth';
 import { isAdminUser } from '../utils/roles';
-import { getIngredientes } from '../api/ingredientes';
 import { useProductsStockFeed } from '../hooks/useOrderStatusWS';
 
 interface CategoriaProducto {
@@ -42,11 +41,6 @@ interface Producto {
   updated_at: string;
 }
 
-interface IngredienteStock {
-  id: number;
-  stock_cantidad: number | string;
-}
-
 interface ProductosResponse {
   data: Producto[];
   total: number;
@@ -68,18 +62,6 @@ function ordenarProductos(productos: Producto[], orden: 'asc' | 'desc') {
     const fechaB = new Date(b.created_at).getTime();
     return orden === 'asc' ? fechaA - fechaB : fechaB - fechaA;
   });
-}
-
-function stockCalculado(producto: Producto, ingredientes: IngredienteStock[]) {
-  const stockById = new Map(ingredientes.map((ingrediente) => [ingrediente.id, Number(ingrediente.stock_cantidad)]));
-  const cantidades = (producto.ingredientes ?? []).map((ingrediente) => {
-    const necesario = Number(ingrediente.cantidad);
-    const disponible = stockById.get(ingrediente.ingrediente_id);
-    if (!necesario || necesario <= 0 || disponible === undefined) return Number.POSITIVE_INFINITY;
-    return Math.floor(disponible / necesario);
-  });
-  const calculado = Math.min(...cantidades);
-  return Number.isFinite(calculado) ? Math.max(0, calculado) : Math.max(0, Number(producto.stock_cantidad ?? 0));
 }
 
 const LIMIT = 10;
@@ -136,25 +118,8 @@ export default function Productos() {
 
         const pagina = ordenarProductos(lista, orden).slice(offset, offset + LIMIT);
 
-        const [conDetalle, ingredientesStock] = await Promise.all([
-          Promise.all(pagina.map(async (p) => {
-            try {
-              const d = await apiClient.get<Producto>(`/productos/${p.id}`);
-              return d.data;
-            } catch {
-              return p;
-            }
-          })),
-          getIngredientes({ offset: 0, limit: 100 }).then((res) => res.data).catch(() => []),
-        ]);
-
-        const productosConStockCalculado = conDetalle.map((producto) => ({
-          ...producto,
-          stock_cantidad: stockCalculado(producto, ingredientesStock),
-        }));
-
         if (!cancelled) {
-          setProductos(productosConStockCalculado);
+          setProductos(pagina);
           setTotal(totalVal);
         }
       } finally {

@@ -390,7 +390,7 @@ export default function ProductNuevo() {
     setError("");
     try {
       const imagen = await uploadImagen(file, "productos");
-      setImagenesUrl((actual) => [actual.trim(), imagen.secure_url].filter(Boolean).join(", "));
+      setImagenesUrl((actual) => [actual.trim(), imagen.url].filter(Boolean).join(", "));
     } catch {
       setError("No se pudo subir la imagen.");
     } finally {
@@ -400,9 +400,6 @@ export default function ProductNuevo() {
 
   async function sincronizarRelacionesProducto(productoIdActual: number) {
     const categoriaActualId = Number(categoriaId);
-    const categoriasAEliminar = categoriaOriginalIds.filter(
-      (id) => id !== categoriaActualId
-    );
 
     if (!categoriaOriginalIds.includes(categoriaActualId)) {
       await apiClient.post(`/productos/${productoIdActual}/categorias`, {
@@ -411,28 +408,39 @@ export default function ProductNuevo() {
       });
     }
 
-    await Promise.all(
-      categoriasAEliminar.map((id) =>
-        apiClient.delete(`/productos/${productoIdActual}/categorias/${id}`)
-      )
-    );
+    const nuevosIds = new Set(ingredientesProducto.map((ing) => ing.ingrediente_id));
+    const originalesIds = new Set(ingredienteOriginalIds);
+    const aAgregar = ingredientesProducto.filter((ing) => !originalesIds.has(ing.ingrediente_id));
+    const aQuitar = ingredienteOriginalIds.filter((id) => !nuevosIds.has(id));
+    const aActualizar = ingredientesProducto.filter((ing) => originalesIds.has(ing.ingrediente_id));
 
-    await Promise.all(
-      ingredienteOriginalIds.map((id) =>
-        apiClient.delete(`/productos/${productoIdActual}/ingredientes/${id}`)
-      )
-    );
+    for (const ing of aAgregar) {
+      await apiClient.post(`/productos/${productoIdActual}/ingredientes`, {
+        ingrediente_id: ing.ingrediente_id,
+        cantidad: ing.cantidad,
+        unidad_medida_id: ing.unidad_medida_id,
+        es_removible: ing.es_removible,
+      });
+    }
 
-    await Promise.all(
-      ingredientesProducto.map((ing) =>
-        apiClient.post(`/productos/${productoIdActual}/ingredientes`, {
-          ingrediente_id: ing.ingrediente_id,
-          cantidad: ing.cantidad,
-          unidad_medida_id: ing.unidad_medida_id,
-          es_removible: ing.es_removible,
-        })
-      )
-    );
+    for (const ing of aActualizar) {
+      await apiClient.delete(`/productos/${productoIdActual}/ingredientes/${ing.ingrediente_id}`);
+      await apiClient.post(`/productos/${productoIdActual}/ingredientes`, {
+        ingrediente_id: ing.ingrediente_id,
+        cantidad: ing.cantidad,
+        unidad_medida_id: ing.unidad_medida_id,
+        es_removible: ing.es_removible,
+      });
+    }
+
+    for (const id of aQuitar) {
+      await apiClient.delete(`/productos/${productoIdActual}/ingredientes/${id}`);
+    }
+
+    const categoriasAEliminar = categoriaOriginalIds.filter((id) => id !== categoriaActualId);
+    for (const id of categoriasAEliminar) {
+      await apiClient.delete(`/productos/${productoIdActual}/categorias/${id}`);
+    }
   }
 
   async function guardarProducto() {
